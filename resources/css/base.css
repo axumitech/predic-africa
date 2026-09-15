@@ -1,0 +1,1 @@
+*{box-sizing:border-box}body{margin:0}html{-webkit-font-smoothing:antialiased}button,input,select,textarea{font:inherit}button,a,input,select,textarea{outline-offset:4px}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent-primary, #f0b40b)}
