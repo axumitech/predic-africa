@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { type Account, money } from './ui';
 import '../../../css/app.css';
 
@@ -20,6 +20,18 @@ function Icon({ name }: { name: string }) {
 }
 export default function Layout({ page, auth, balance, unread, flash, children }: { page: string; auth: Account | null; balance: number; unread: number; flash?: { success?: string }; children: ReactNode }) {
     const [menu, setMenu] = useState(false);
+    const drawer = useRef<HTMLDialogElement>(null);
+    useEffect(() => {
+        const dialog = drawer.current;
+        if (!dialog || !menu) return;
+        dialog.showModal();
+        const previous = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        const desktop = window.matchMedia('(min-width: 1024px)');
+        const closeOnDesktop = () => { if (desktop.matches) setMenu(false); };
+        desktop.addEventListener('change', closeOnDesktop);
+        return () => { dialog.close(); document.body.style.overflow = previous; desktop.removeEventListener('change', closeOnDesktop); };
+    }, [menu]);
     const [region, setRegion] = useState('SEN');
     const workspace = auth && !['home', 'terms', 'privacy', 'data', 'help'].includes(page);
     const authentication = page === 'login' || page === 'register';
@@ -34,13 +46,25 @@ export default function Layout({ page, auth, balance, unread, flash, children }:
                     <div className="wallet-widget__balance"><span className="balance-value">{money(balance)}</span> <span className="balance-currency">crédits</span></div>
                     <div className="wallet-widget__actions"><Link href="/wallet" className="btn btn--primary" aria-label="Gérer mon portefeuille">Recharger</Link><Link href="/wallet" className="btn btn--outline">Retirer</Link></div>
                 </div>
-                <nav className={`nav-menu p-navigation ${menu ? 'p-menu-open' : ''}`} aria-label="Navigation principale">
+                <nav className="nav-menu p-navigation" aria-label="Navigation principale">
                     {nav.map(([key, href, icon, title]) => <Link key={key} href={href} onClick={() => setMenu(false)} className={`nav-menu__item ${page === key || (page === 'market' && key === 'markets') || (page === 'ticket' && key === 'support') ? 'active' : ''}`}><Icon name={icon}/><span>{title}</span>{key === 'notifications' && unread > 0 && <span className="badge badge--accent">{unread}</span>}</Link>)}
                     {auth.role === 'admin' && [['admin', 'Backoffice'], ['admin-markets', 'Modération'], ['admin-users', 'Gestion Utilisateurs'], ['admin-pipeline', 'Pipeline IA']].map(([key, title]) => <Link key={key} className={`nav-menu__item ${page === key ? 'active' : ''}`} href={'/' + key.replace('-', '/')} onClick={() => setMenu(false)}><Icon name={key === 'admin-users' ? 'user' : 'grid'}/><span>{title}</span></Link>)}
                 </nav>
                 <div className="sidebar__profile p-user"><div className="profile-avatar">{auth.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div><div className="profile-info"><div className="profile-name">{auth.name}</div><div className="profile-location">{auth.role === 'admin' ? 'Administrateur' : 'Compte trader'}</div></div><button className="btn-text-action btn-logout" aria-label="Se déconnecter" onClick={() => router.post('/logout')}>Quitter</button></div>
             </aside>
-            <div className="main-panel p-main"><header className="app-header p-topbar"><button className="p-mobile-toggle btn btn--outline" aria-expanded={menu} aria-label="Menu de navigation" onClick={() => setMenu(!menu)}>☰</button><div className="app-header__actions"><div className="status-indicator"><span className="pulse-dot"/><span className="status-text">Simulateur Actif</span></div><Link href="/notifications" aria-label={`Notifications : ${unread} non lues`} className="notification-bell"><Icon name="bell"/>{unread > 0 && <span className="notification-badge">{unread}</span>}</Link></div></header><main className="view-content">{page !== 'markets' && <div className="p-page-heading"><h1>{titles[page]}</h1></div>}{flash?.success && <div role="status" className="p-success">{flash.success}</div>}{children}</main></div>
+            <div className="main-panel p-main"><header className="app-header p-topbar"><Link href="/markets" className="p-mobile-brand"><img src="/HOR_WG.png" alt="PredicAfrica"/></Link><div className="app-header__actions"><div className="status-indicator"><span className="pulse-dot"/><span className="status-text">Simulateur Actif</span></div><Link href="/notifications" aria-label={`Notifications : ${unread} non lues`} className="notification-bell"><Icon name="bell"/>{unread > 0 && <span className="notification-badge">{unread}</span>}</Link></div></header><main className="view-content">{page !== 'markets' && <div className="p-page-heading"><h1>{titles[page]}</h1></div>}{flash?.success && <div role="status" className="p-success">{flash.success}</div>}{children}</main></div>
+            <nav className="p-dock" aria-label="Navigation mobile">
+                {[['markets', '/markets', 'grid', 'Marchés'], ['positions', '/positions', 'positions', 'Positions'], ['wallet', '/wallet', 'wallet', 'Portefeuille'], ['support', '/support', 'support', 'Support']].map(([key, href, icon, label]) => <Link key={key} href={href} aria-current={page === key || (page === 'market' && key === 'markets') || (page === 'ticket' && key === 'support') ? 'page' : undefined}><Icon name={icon}/><span>{label}</span></Link>)}
+                <button type="button" aria-label="Menu de navigation" aria-haspopup="dialog" aria-expanded={menu} aria-controls="mobile-navigation" onClick={() => setMenu(true)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span></button>
+            </nav>
+            <dialog ref={drawer} id="mobile-navigation" className="p-drawer" aria-labelledby="mobile-menu-title" onCancel={() => setMenu(false)} onClose={() => setMenu(false)} onClick={e => { if (e.target === e.currentTarget) setMenu(false); }}>
+                <div className="p-drawer-body">
+                    <header><div><small>VOTRE ESPACE</small><h2 id="mobile-menu-title">{auth.name}</h2></div><button type="button" aria-label="Fermer le menu" onClick={() => setMenu(false)}>×</button></header>
+                    <Link className="p-drawer-balance" href="/wallet" onClick={() => setMenu(false)}><span>Mon portefeuille<strong>{money(balance)} <small>crédits démo</small></strong></span><span aria-hidden="true">→</span></Link>
+                    <nav aria-label="Tous les parcours">{[...nav, ...(auth.role === 'admin' ? [['admin', '/admin', 'grid', 'Backoffice'], ['admin-markets', '/admin/markets', 'grid', 'Modération'], ['admin-users', '/admin/users', 'user', 'Utilisateurs'], ['admin-pipeline', '/admin/pipeline', 'grid', 'Pipeline IA']] : [])].map(([key, href, icon, title]) => <Link key={key} href={href} aria-current={page === key ? 'page' : undefined} onClick={() => setMenu(false)}><Icon name={icon}/><span>{title}</span></Link>)}</nav>
+                    <button type="button" className="p-drawer-logout" onClick={() => { setMenu(false); router.post('/logout'); }}>Se déconnecter</button>
+                </div>
+            </dialog>
         </> : authentication ? <div id="app-login"><div className="login-container"><div className="login-header-bar"><Link href="/" className="btn btn--outline btn--sm">← Retour à l’accueil</Link><img src="/HOR_WG.png" alt="Wegame Logo" className="brand-img" style={{ height: 32, width: 'auto' }}/></div>{children}</div></div> : <><header className="landing-header"><Link href="/" className="landing-header__brand"><img src="/HOR_WG.png" alt="Wegame Logo" className="brand-img" style={{ height: 40, width: 'auto' }}/></Link><Link className="btn btn--primary" href={auth ? '/markets' : '/login'}>Accéder à la Bourse</Link></header><main>{children}</main><Footer/></>}
     </div>;
 }

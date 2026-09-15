@@ -1,4 +1,5 @@
 import '../css/base.css';
+import '../css/responsive.css';
 import { createInertiaApp } from '@inertiajs/react';
 import type { ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';

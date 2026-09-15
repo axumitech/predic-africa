@@ -1,0 +1,55 @@
+/* Shared small-screen foundations for the public pages and the original demo. */
+html { scroll-padding-top: 90px; }
+@media (max-width: 767px) {
+    body :is(input, select, textarea) { font-size: 16px !important; }
+    #app-landing .landing-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 12px 16px; gap: 10px; }
+    #app-landing .landing-header__brand img { max-width: 145px; height: auto !important; }
+    #app-landing .lang-selector { justify-self: end; }
+    #app-landing .lang-btn { min-width: 44px; min-height: 40px; }
+    #app-landing #btn-enter-bourse { grid-column: 1 / -1; min-height: 46px; width: 100%; }
+    #app-landing .landing-hero { min-height: auto; padding: 36px 20px; gap: 30px; }
+    #app-landing .hero-title { font-size: clamp(30px, 8.8vw, 48px); line-height: 1.15; letter-spacing: -.04em; }
+    #app-landing .hero-desc { font-size: 16px; line-height: 1.75; }
+    #app-landing .hero-actions .btn { min-height: 52px; }
+    #app-landing .hero-metrics { gap: 10px; }
+    #app-landing .metric-lbl { font-size: 11px; line-height: 1.5; }
+    #app-landing .mock-card { transform: none; width: 100%; padding: 20px; border-radius: 18px; }
+    #app-landing .mock-card h3 { line-height: 1.5; }
+    #app-landing .mock-phone { width: min(100%, 320px); }
+    #app-landing :is(.contact-card, .step-card) { padding: 22px; min-width: 0; }
+    #app-landing .btn, #app-landing .faq-question { min-height: 48px; }
+    #app-landing :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+    .modal-backdrop.active { align-items: flex-end; padding: 12px 8px 0; }
+    .modal-backdrop .modal-card { width: 100%; max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain; border-radius: 22px 22px 0 0; padding: 24px 20px calc(24px + env(safe-area-inset-bottom)); }
+    .modal-backdrop .modal-close-btn { width: 44px; height: 44px; top: 8px; right: 8px; }
+    .modal-backdrop .modal-header { padding-right: 32px; }
+    .modal-backdrop .btn { min-height: 48px; }
+    body .whatsapp-widget { width: 48px; height: 48px; right: 16px; bottom: calc(42px + env(safe-area-inset-bottom)); }
+    body .whatsapp-chat { right: 12px; width: calc(100% - 24px); bottom: calc(102px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 125px); }
+    body .whatsapp-chat__messages { min-height: 0; overflow-y: auto; }
+    .pa-login .pa-login-access { padding: 20px; }
+    .pa-login .pa-login-form-area { padding-top: 24px; }
+    .pa-login .pa-login-register { font-size: 13px; }
+    .pa-login .pa-login-register a, .pa-login .pa-login-footer a { display: inline-flex; align-items: center; min-height: 44px; }
+    .pa-login .pa-login-footer { gap: 8px; font-size: 11px; }
+    .pa-login .pa-login-footer > div { flex-wrap: wrap; gap: 14px; }
+    .platform #app-login { padding: 24px 16px; }
+    .platform .login-container { width: 100%; min-width: 0; }
+    .platform .login-header-bar { flex-wrap: wrap; gap: 16px; }
+    .platform .login-card { padding: 24px 20px; }
+    .platform.p-public .landing-header { gap: 16px; flex-wrap: wrap; padding: 16px; }
+    .platform.p-public .landing-header img { max-width: 140px; height: auto !important; }
+    .platform .p-document { padding: 32px 20px; overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    body *, body *::before, body *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+.platform .login-header-bar { background: #081326; padding: 16px; border-radius: 16px; }
+.platform .login-header-bar .btn { color: #fff; border-color: #30415d; }
+@media (max-width: 767px) {
+    .platform .login-header-bar { display: flex; flex-direction: column-reverse; align-items: flex-start; }
+    .platform .login-header-bar .btn { width: 100%; }
+    #app-landing .landing-footer a { display: inline-flex; min-height: 44px; align-items: center; }
+    #app-landing .landing-footer > div { flex-wrap: wrap; }
+}
