@@ -9,6 +9,7 @@ export default function ErrorPage({ status }: { status: number }) {
         404: ['Page introuvable', 'Ce lien ne correspond à aucune page disponible.'],
         419: ['Votre session a expiré', 'Reconnectez-vous, puis réessayez votre opération.'],
         429: ['Un instant, s’il vous plaît', 'Trop de demandes ont été envoyées. Attendez une minute avant de réessayer.'],
+        500: ['Une erreur est survenue', 'Votre demande n’a pas pu aboutir. Consultez vos opérations avant de réessayer.'],
         503: ['Service temporairement indisponible', 'Veuillez réessayer dans quelques instants.'],
     };
     const [title, message] = messages[status] || ['Une erreur est survenue', 'Veuillez réessayer.'];

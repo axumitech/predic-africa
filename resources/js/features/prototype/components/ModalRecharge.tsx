@@ -106,7 +106,7 @@ export default memo(function ModalRecharge() {
 <div className={"ussd-body"}>
 
 
-<p className={"ussd-instruction"} id={"ussd-instruction-text"}>{"\n                            Une demande de confirmation a été envoyée sur votre téléphone. Saisissez votre code PIN secret à 4 chiffres ci-dessous pour valider la transaction.\n                        "}</p>
+<p className={"ussd-instruction"} id={"ussd-instruction-text"}>{"\n                            Simulation locale : aucune demande n’est envoyée sur votre téléphone. Saisissez votre code fictif à 4 chiffres ci-dessous pour valider la transaction.\n                        "}</p>
 
 <div className={"ussd-amount-summary"}>
 <span>{"Montant à débiter :"}</span>

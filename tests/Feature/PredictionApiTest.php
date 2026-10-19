@@ -10,6 +10,7 @@ use Tests\TestCase;
 
 class PredictionApiTest extends TestCase
 {
+    use \Illuminate\Foundation\Testing\RefreshDatabase;
     public function test_legacy_demo_remains_available(): void
     {
         $this->withoutVite()->get('/demo')->assertOk()

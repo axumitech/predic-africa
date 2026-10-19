@@ -28,7 +28,7 @@ export default memo(function ViewUsersManagement() {
 <div className={"form-group"}>
 <label htmlFor={"create-user-contact"}>{"Adresse Email / Téléphone"}</label>
 
-<input type={"text"} id={"create-user-contact"} placeholder={"mariama.sow@predicafrika.com"} required />
+<input type={"text"} id={"create-user-contact"} placeholder={"mariama.sow@predicafrica.com"} required />
 </div>
 </div>
 

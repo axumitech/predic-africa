@@ -15,7 +15,7 @@ export default memo(function AppWorkspace() {
 
 <aside className={"sidebar"}>
 <div className={"sidebar__brand"}>
-<img src="/HOR_WG.png" alt={"Wegame Logo"} className={"brand-img"} style={{"height":"40px","width":"auto"}} />
+<img src="/HOR_WG.png" alt={"PredicAfrica"} className={"brand-img"} style={{"height":"40px","width":"auto"}} />
 </div>
 
 

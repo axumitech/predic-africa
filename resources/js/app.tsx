@@ -1,4 +1,8 @@
 import '../css/base.css';
+import '../css/tokens.css';
+import RenderBoundary from './components/RenderBoundary';
+import ConnectionStatus from './components/ConnectionStatus';
+import { LocaleProvider } from './content/locale';
 import '../css/responsive.css';
 import { createInertiaApp } from '@inertiajs/react';
 import type { ComponentType } from 'react';
@@ -12,6 +16,6 @@ createInertiaApp({
         return (await load()).default;
     },
     setup({ el, App, props }) {
-        createRoot(el).render(<App {...props} />);
+        createRoot(el).render(<RenderBoundary><LocaleProvider><ConnectionStatus/><App {...props} /></LocaleProvider></RenderBoundary>);
     },
 });

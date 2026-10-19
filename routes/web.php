@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\PlatformController;
-use App\Http\Middleware\ActiveAccount;
 use App\Modules\Identity\Http\IdentityController;
 use App\Modules\Markets\Http\MarketController;
 use App\Modules\Payments\Http\PaymentController;
@@ -11,25 +10,30 @@ use App\Modules\Settlement\Http\SettlementController;
 use App\Modules\Support\Http\SupportController;
 use App\Modules\Trading\Http\TradingController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', fn () => Inertia::render('Platform', ['page' => 'home']))->name('home');
+Route::get('/', fn (Request $request) => app(PlatformController::class)->page($request, 'home'))->name('home');
 Route::get('/demo', fn () => Inertia::render('Prototype', ['mode' => 'demo']));
 foreach (['terms', 'privacy', 'data', 'help'] as $page) {
     Route::get('/'.$page, fn () => Inertia::render('Platform', ['page' => $page]));
 }
 Route::middleware('guest')->group(function () {
     Route::get('/login', fn () => Inertia::render('Login'))->name('login');
-    Route::get('/register', fn () => Inertia::render('Platform', ['page' => 'register']));
-    Route::post('/login', [IdentityController::class, 'login'])->middleware('throttle:6,1');
+    Route::get('/register', fn () => Inertia::render('Register'));
+    Route::post('/login', [IdentityController::class, 'login'])->middleware('throttle:login');
     Route::post('/register', [IdentityController::class, 'register'])->middleware('throttle:6,1');
 });
 Route::post('/logout', [IdentityController::class, 'logout'])->middleware('auth');
-Route::middleware(['auth', ActiveAccount::class])->group(function () {
-    foreach (['markets', 'positions', 'transactions', 'wallet', 'creator', 'support', 'notifications', 'profile', 'predictions', 'admin', 'admin/markets', 'admin/users', 'admin/pipeline'] as $path) {
+Route::middleware(['auth'])->group(function () {
+    foreach (['dashboard', 'markets', 'positions', 'transactions', 'wallet', 'creator', 'support', 'notifications', 'profile', 'predictions', 'admin', 'admin/markets', 'admin/users', 'admin/pipeline'] as $path) {
         Route::get('/'.$path, fn (Request $request) => app(PlatformController::class)->page($request, str_replace('/', '-', $path)));
     }
+    Route::get('/admin/markets/{id}', function (Request $request, int $id) {
+        Gate::authorize('admin');
+        return app(PlatformController::class)->page($request, 'market', $id);
+    })->whereNumber('id');
     Route::get('/markets/{id}', fn (Request $request, int $id) => app(PlatformController::class)->page($request, 'market', $id))->whereNumber('id');
     Route::get('/support/{id}', fn (Request $request, int $id) => app(PlatformController::class)->page($request, 'ticket', $id))->whereNumber('id');
     Route::middleware('throttle:30,1')->group(function () {
@@ -42,7 +46,7 @@ Route::middleware(['auth', ActiveAccount::class])->group(function () {
         Route::post('/profile', [IdentityController::class, 'profile']);
         Route::post('/admin/markets/{id}/moderate', [MarketController::class, 'moderate'])->whereNumber('id');
         Route::post('/admin/markets/{id}/resolve', [SettlementController::class, 'store'])->whereNumber('id');
-        Route::post('/admin/pipeline/generate', [PipelineAdminController::class, 'generate'])->middleware('throttle:3,1');
+        Route::post('/admin/pipeline/generate', [PipelineAdminController::class, 'generate'])->middleware('throttle:3,1,pipeline-generate:');
         Route::post('/admin/pipeline/import', [PipelineAdminController::class, 'import']);
         Route::post('/admin/users/{id}', [IdentityController::class, 'suspend'])->whereNumber('id');
     });

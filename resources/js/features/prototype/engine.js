@@ -2,7 +2,7 @@ import { createDemoScope } from './scope';
 // ==========================================================================
 // PREDICAFRICA APP ENGINE
 // ==========================================================================
-export function initializePrototype() {
+export function initializePrototype(direct = false) {
     const scope = createDemoScope();
     let targetWorkspaceView = 'dashboard';
     function showNotification(message) {
@@ -594,13 +594,13 @@ export function initializePrototype() {
                 confName = 'T-Money';
                 confLogo = 'TM';
                 confPlaceholder = '96 12 34 56';
-                confPinInstruction = "Saisissez votre code PIN secret T-Money à 4 chiffres pour valider la transaction.";
+                confPinInstruction = "Saisissez votre code fictif T-Money à 4 chiffres pour valider la transaction.";
             }
             else if (selectedCountry === 'COD' && operator === 'mtn') {
                 confName = 'M-Pesa';
                 confLogo = 'MP';
                 confPlaceholder = '82 123 45 67';
-                confPinInstruction = "Saisissez votre code PIN secret M-Pesa à 4 chiffres pour valider le transfert.";
+                confPinInstruction = "Saisissez votre code fictif M-Pesa à 4 chiffres pour valider le transfert.";
             }
             else {
                 const defaults = {
@@ -614,7 +614,7 @@ export function initializePrototype() {
                 confName = def.name;
                 confLogo = def.logo;
                 confPlaceholder = def.placeholder;
-                confPinInstruction = `Validez la demande en saisissant votre code secret ${def.pin} à 4 chiffres.`;
+                confPinInstruction = `Validez la demande en saisissant votre code fictif ${def.pin} à 4 chiffres.`;
             }
             activeOperatorConfig = {
                 key: operator,
@@ -1486,7 +1486,7 @@ export function initializePrototype() {
             let response = "Désolé, je n'ai pas bien compris. Tapez 'recharge', 'retrait' ou 'marché' pour obtenir des explications.";
             const q = query.toLowerCase();
             if (q.includes('recharge') || q.includes('depot') || q.includes('dépôt') || q.includes('payer')) {
-                response = "Pour recharger : allez sur le Portefeuille (dans la bourse), cliquez sur 'Recharger', choisissez votre opérateur, tapez votre numéro et validez la notification push fictive avec un code secret à 4 chiffres (ex: 1234).";
+                response = "Pour recharger : allez sur le Portefeuille (dans la bourse), cliquez sur 'Recharger', choisissez votre opérateur, tapez votre numéro et validez la notification push fictive avec un code fictif à 4 chiffres (ex: 1234).";
             }
             else if (q.includes('retrait') || q.includes('retirer') || q.includes('argent') || q.includes('liquider')) {
                 response = "Pour retirer vos fonds : liquidez vos positions gagnantes dans 'Mes Positions', puis cliquez sur 'Retirer' dans votre portefeuille. Choisissez votre opérateur Mobile Money local pour simuler le transfert vers votre mobile.";
@@ -1704,7 +1704,7 @@ export function initializePrototype() {
                 moov: "Moov Money"
             };
             document.getElementById('withdraw-ussd-instruction-text').textContent =
-                `Confirmez la réception de votre virement en saisissant votre code secret ${pinInstructions[opKey] || 'Mobile Money'} à 4 chiffres.`;
+                `Confirmez la réception de votre virement en saisissant votre code fictif ${pinInstructions[opKey] || 'Mobile Money'} à 4 chiffres.`;
             document.getElementById('withdraw-ussd-pin-code').value = '';
             goToWithdrawStep(2);
         });
@@ -2218,7 +2218,7 @@ Entrez votre Nom et Prénom :`,
                 reg_name_empty: "Le nom complet ne peut pas être vide.",
                 reg_pin_title: `S'inscrire à PredicAfrica
 Nom : {name}
-Créez un code PIN secret à 4 chiffres :`,
+Créez un code fictif à 4 chiffres :`,
                 reg_pin_placeholder: "PIN secret...",
                 reg_pin_error: "Le PIN doit comporter 4 chiffres.",
                 reg_success: `✓ Inscription réussie !
@@ -3015,25 +3015,25 @@ Click Send to exit.`
             faq_block_1: "Général & Plateforme",
             faq_block_2: "Transactions & Sécurité",
             faq_q1: "Qu'est-ce qu'une bourse de prédictions ?",
-            faq_a1: "Une bourse de prédictions est une plateforme financière sur laquelle vous pouvez acheter des contrats (parts) liés à la réalisation d'événements futurs. Si l'événement se réalise, le contrat prend de la valeur et vous encaissez un rendement basé sur le multiplicateur de cotes garanti lors de votre achat.",
+            faq_a1: "Une démonstration de positions Oui/Non à cote fixe. Les crédits sont fictifs et sans valeur monétaire.",
             faq_q2: "Comment fonctionne la simulation de Mobile Money ?",
-            faq_a2: "Il s'agit d'un simulateur GSM interactif. Vous pouvez simuler des recharges et des retraits d'argent en entrant un numéro et en saisissant un code secret fictif à 4 chiffres (comme 1234). Cela vous permet de valider le comportement fonctionnel de la plateforme.",
+            faq_a2: "Il s'agit d'un simulateur GSM interactif. Vous pouvez simuler des recharges et des retraits d'argent en entrant un numéro et en saisissant un code fictif fictif à 4 chiffres (comme 1234). Cela vous permet de valider le comportement fonctionnel de la plateforme.",
             faq_q3: "Les retraits de fonds sont-ils instantanés ?",
             faq_a3: "Oui. En cliquant sur le bouton Retirer de votre portefeuille, le simulateur traite la transaction en 2 secondes et met à jour instantanément votre compte virtuel, comme un retrait Mobile Money en production.",
             faq_q4: "Est-ce légal et sécurisé ?",
             faq_a4: "Il s'agit ici d'une simulation MVP destinée à présenter le design technique et l'expérience utilisateur. Aucune transaction financière réelle n'est effectuée. Les soldes et les dépôts sont purement virtuels et stockés localement.",
             faq_q5: "Quels sont les frais de transaction ?",
-            faq_a5: "La création de compte et les dépôts sont 100% gratuits. Nous prélevons une commission minime de 2% uniquement sur les gains nets réalisés lors du dénouement d'un marché.",
+            faq_a5: "Aucune commission n’est appliquée dans la version actuelle.",
             faq_q6: "Qui crée et résout les marchés ?",
-            faq_a6: "Les marchés sont créés par notre équipe d'experts et nos partenaires certifiés. La résolution est basée sur des sources publiques officielles et vérifiables (résultats électoraux, données officielles) pour garantir une totale transparence.",
+            faq_a6: "Un administrateur vérifie les règles et enregistre le résultat avec une source.",
             faq_q7: "Puis-je revendre mes parts avant la fin d'un événement ?",
-            faq_a7: "Oui. Vous avez la possibilité de liquider vos positions sur le marché secondaire avant la clôture, selon l'évolution des cotes en temps réel, afin de sécuriser vos profits ou limiter vos pertes.",
+            faq_a7: "La revente et la sortie anticipée ne sont pas disponibles dans cette version.",
             faq_q8: "Dans quels pays le service est-il disponible ?",
-            faq_a8: "PredicAfrica est actuellement disponible dans plusieurs pays d'Afrique, avec le support des principaux opérateurs Mobile Money tels que Orange, MTN, Moov, Wave, Airtel et M-Pesa.",
+            faq_a8: "Les opérateurs et devises du prototype sont illustratifs. Aucun opérateur de paiement n’est connecté.",
             faq_q9: "Y a-t-il un montant minimum pour commencer ?",
-            faq_a9: "L'accessibilité est notre priorité. Le montant minimum de dépôt et de prise de position est de seulement 500 FCFA (ou équivalent local), vous permettant de démarrer avec un très petit budget.",
+            faq_a9: "Dans l’espace serveur, les mises et dépôts simulés commencent à 100 crédits fictifs. Le prototype local conserve ses montants de démonstration.",
             faq_q10: "Mes données personnelles sont-elles protégées ?",
-            faq_a10: "Absolument. Nous appliquons les standards de sécurité bancaire les plus stricts. Vos données sont chiffrées de bout en bout et nous ne partageons jamais vos informations avec des tiers.",
+            faq_a10: "Le prototype conserve ses données dans votre navigateur. Ne saisissez aucun vrai code PIN. L’espace serveur protège les accès et hache les mots de passe.",
             calc_title: "Simulateur de Gains & Rendements",
             calc_desc: "Estimez vos profits potentiels en fonction de vos investissements et des cotes de marché.",
             calc_label_market: "Sélectionnez un Marché",
@@ -3150,7 +3150,7 @@ Click Send to exit.`
             faq_block_1: "General & Platform",
             faq_block_2: "Transactions & Security",
             faq_q1: "What is a prediction market?",
-            faq_a1: "A prediction market is a financial platform where you can buy contracts (shares) tied to the outcome of future events. If the event happens, the contract increases in value and you collect a return based on the odds multiplier guaranteed at purchase.",
+            faq_a1: "A demo of fixed-odds Yes/No positions. Credits are fictional and have no monetary value.",
             faq_q2: "How does the Mobile Money simulation work?",
             faq_a2: "It is an interactive GSM simulator. You can simulate deposits and withdrawals by entering a phone number and typing a dummy 4-digit secret code (such as 1234). This allows you to validate the platform's functional behavior.",
             faq_q3: "Are fund withdrawals instant?",
@@ -3158,17 +3158,17 @@ Click Send to exit.`
             faq_q4: "Is it legal and secure?",
             faq_a4: "This is an MVP simulation designed to present the technical design and user experience. No real financial transactions are made. Balances and deposits are purely virtual and stored locally.",
             faq_q5: "What are the transaction fees?",
-            faq_a5: "Account creation and deposits are 100% free. We take a minimal 2% commission only on net profits realized when a market resolves.",
+            faq_a5: "No commission is charged in this version.",
             faq_q6: "Who creates and resolves markets?",
-            faq_a6: "Markets are created by our expert team and certified partners. Resolution is based on official and verifiable public sources (election results, official data) to guarantee total transparency.",
+            faq_a6: "An administrator reviews the rules and records the outcome and its source.",
             faq_q7: "Can I sell my shares before an event ends?",
-            faq_a7: "Yes. You have the ability to liquidate your positions on the secondary market before closure, based on real-time odds, in order to secure profits or limit losses.",
+            faq_a7: "Resale and early exit are not available in this version.",
             faq_q8: "In which countries is the service available?",
-            faq_a8: "PredicAfrica is currently available in several African countries, with support for major Mobile Money operators such as Orange, MTN, Moov, Wave, Airtel, and M-Pesa.",
+            faq_a8: "Prototype providers and currencies are illustrative. No payment provider is connected.",
             faq_q9: "Is there a minimum amount to start?",
-            faq_a9: "Accessibility is our priority. The minimum deposit and trading amount is only 500 FCFA (or local equivalent), allowing you to start with a very small budget.",
+            faq_a9: "In the server workspace, stakes and simulated deposits start at 100 fictional credits. The local prototype retains its demo amounts.",
             faq_q10: "Is my personal data protected?",
-            faq_a10: "Absolutely. We apply the strictest banking security standards. Your data is end-to-end encrypted and we never share your information with third parties.",
+            faq_a10: "The prototype stores its data in your browser. Never enter a real PIN. The server workspace enforces access controls and hashes passwords.",
             calc_title: "Yield & Return Simulator",
             calc_desc: "Estimate your potential profits based on your investments and market odds.",
             calc_label_market: "Select a Market",
@@ -3397,9 +3397,9 @@ Click Send to exit.`
     const formCreateUser = document.getElementById('form-create-user');
     const searchSystemUsersInput = document.getElementById('search-system-users');
     let systemUsers = JSON.parse(localStorage.getItem('pa_system_users')) || [
-        { id: 'USR-001', name: 'Ablaye Diop', contact: 'ablaye.diop@predicafrika.com', role: 'SuperAdmin', region: 'ALL', status: 'Actif', lastLogin: '20/08/2026 13:40' },
-        { id: 'USR-002', name: 'Mariama Sow', contact: 'mariama.sow@predicafrika.com', role: 'Modérateur', region: 'SEN', status: 'Actif', lastLogin: '20/08/2026 12:15' },
-        { id: 'USR-003', name: 'Ousmane Kane', contact: 'ousmane.kane@predicafrika.com', role: 'Agent Support', region: 'ALL', status: 'Actif', lastLogin: '20/08/2026 11:50' },
+        { id: 'USR-001', name: 'Ablaye Diop', contact: 'ablaye.diop@predicafrica.com', role: 'SuperAdmin', region: 'ALL', status: 'Actif', lastLogin: '20/08/2026 13:40' },
+        { id: 'USR-002', name: 'Mariama Sow', contact: 'mariama.sow@predicafrica.com', role: 'Modérateur', region: 'SEN', status: 'Actif', lastLogin: '20/08/2026 12:15' },
+        { id: 'USR-003', name: 'Ousmane Kane', contact: 'ousmane.kane@predicafrica.com', role: 'Agent Support', region: 'ALL', status: 'Actif', lastLogin: '20/08/2026 11:50' },
         { id: 'USR-004', name: 'Kouassi Jean', contact: '+225 07 88 12 34', role: 'Trader', region: 'CIV', status: 'Actif', lastLogin: '19/08/2026 18:30' },
         { id: 'USR-005', name: 'Samuel Eto', contact: '+237 69 44 11 22', role: 'Trader', region: 'CMR', status: 'Actif', lastLogin: '19/08/2026 16:00' }
     ];
@@ -4200,5 +4200,6 @@ Click Send to exit.`
         });
     }
     renderLandingPredictions();
+    if (direct) enterApp();
     return () => { scope.dispose(); document.getElementById('prototype-toast')?.remove(); delete window.openSupportTicketModal; };
 }

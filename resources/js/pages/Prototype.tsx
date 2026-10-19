@@ -15,7 +15,7 @@ import ModalSupportReply from '../features/prototype/components/ModalSupportRepl
 import ModalNewTicket from '../features/prototype/components/ModalNewTicket';
 
 export default function Prototype() {
- useEffect(() => initializePrototype(), []);
+ useEffect(() => initializePrototype(true), []);
  return <>
  <Head title="PredicAfrica — Bourse de prédictions" />
  <div className="demo-notice" role="note">Démonstration · Soldes, paiements et prédictions simulés</div>

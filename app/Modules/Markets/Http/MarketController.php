@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Notifications\Notifier;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -27,7 +28,7 @@ class MarketController extends Controller
 
     public function moderate(Request $request, int $id)
     {
-        abort_unless($request->user()->role === 'admin', 403);
+        Gate::authorize('admin');
         $data = $request->validate(['status' => ['required', Rule::in(['open', 'rejected'])]]);
         DB::transaction(function () use ($id, $data) {
             $market = DB::table('markets')->where('id', $id)->lockForUpdate()->first();

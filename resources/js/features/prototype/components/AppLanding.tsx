@@ -8,7 +8,7 @@ export default memo(function AppLanding() {
 
 <header className={"landing-header"}>
 <div className={"landing-header__brand"}>
-<img src="/HOR_WG.png" alt={"Wegame Logo"} className={"brand-img"} style={{"height":"40px","width":"auto"}} />
+<img src="/HOR_WG.png" alt={"PredicAfrica"} className={"brand-img"} style={{"height":"40px","width":"auto"}} />
 </div>
 
 <nav className={"landing-nav"}>
@@ -305,7 +305,7 @@ export default memo(function AppLanding() {
 <button className={"faq-question"} data-i18n={"faq_q2"}>{"Comment fonctionne la simulation de Mobile Money ?"}</button>
 
 <div className={"faq-answer"}>
-<p data-i18n={"faq_a2"}>{"Il s'agit d'un simulateur GSM interactif. Vous pouvez simuler des recharges et des retraits d'argent en entrant un numéro et en saisissant un code secret fictif à 4 chiffres (comme 1234). Cela vous permet de valider le comportement fonctionnel de la plateforme."}</p>
+<p data-i18n={"faq_a2"}>{"Il s'agit d'un simulateur GSM interactif. Vous pouvez simuler des recharges et des retraits d'argent en entrant un numéro et en saisissant un code fictif fictif à 4 chiffres (comme 1234). Cela vous permet de valider le comportement fonctionnel de la plateforme."}</p>
 </div>
 </div>
 
@@ -474,7 +474,7 @@ export default memo(function AppLanding() {
 
 <span data-i18n={"contact_card_email_title"}>{"E-mail"}</span></h3>
 
-<p>{"support@predicafrika.com"}</p>
+<p>{"support@predicafrica.com"}</p>
 </div>
 
 <div className={"contact-card"}>

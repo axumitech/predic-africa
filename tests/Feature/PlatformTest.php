@@ -51,9 +51,30 @@ class PlatformTest extends TestCase
         return (int) DB::table('accounts')->where('user_id', $user->id)->value('balance');
     }
 
+    public function test_catalog_aggregates_filters_and_private_records_stay_scoped(): void
+    {
+        $user = $this->user();
+        $other = $this->user();
+        $market = $this->market($user);
+        $pending = $this->market($other, 'pending');
+        $this->deposit($user);
+        $this->bet($user, $market, 200);
+        $this->deposit($other);
+        $this->bet($other, $market, 300);
+        $this->actingAs($user)->get('/markets?sort=volume&closing=week')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->has('markets.data', 1)->where('markets.data.0.id', $market)
+            ->where('markets.data.0.volume', 500)->where('markets.data.0.participants', 2));
+        $this->get('/positions?status=open')->assertInertia(fn (Assert $page) => $page->has('positions.data', 1)->where('positions.data.0.stake', 200));
+        $this->get('/positions?status=won')->assertInertia(fn (Assert $page) => $page->has('positions.data', 0));
+        $this->get('/wallet?kind=Mise')->assertInertia(fn (Assert $page) => $page->has('transactions.data', 1)->where('walletStats.engaged', 200)->where('walletStats.deposits', 1000));
+        $this->get('/dashboard')->assertInertia(fn (Assert $page) => $page->where('stats.potential', 470)->where('activity.6.value', 1200));
+        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('markets.data', 1)->where('markets.data.0.id', $market));
+        $this->get('/markets?sort=invalid')->assertSessionHasErrors('sort');
+    }
+
     public function test_registration_authenticates_and_never_accepts_admin_role(): void
     {
-        $this->post('/register', ['name' => 'Trader', 'email' => 'trader@example.test', 'password' => 'test-password-123', 'password_confirmation' => 'test-password-123', 'role' => 'admin'])->assertRedirect('/markets');
+        $this->post('/register', ['name' => 'Trader', 'email' => 'trader@example.test', 'password' => 'test-password-123', 'password_confirmation' => 'test-password-123', 'role' => 'admin'])->assertRedirect('/dashboard');
         $user = User::first();
         $this->assertAuthenticatedAs($user);
         $this->assertSame('trader', $user->role);
@@ -62,7 +83,7 @@ class PlatformTest extends TestCase
         $this->post('/logout')->assertRedirect('/');
         $this->assertGuest();
         $this->post('/login', ['email' => $user->email, 'password' => 'incorrect'])->assertSessionHasErrors('email');
-        $this->post('/login', ['email' => $user->email, 'password' => 'test-password-123'])->assertRedirect('/markets');
+        $this->post('/login', ['email' => $user->email, 'password' => 'test-password-123'])->assertRedirect('/dashboard');
     }
 
     public function test_private_pages_require_login_and_admin_permissions_are_server_side(): void
@@ -89,6 +110,40 @@ class PlatformTest extends TestCase
         $id = $this->market($user);
         $this->get('/markets/'.$id)->assertOk();
         $this->get('/markets/99999')->assertNotFound();
+    }
+
+    public function test_dashboard_is_personal_and_excludes_other_users_activity(): void
+    {
+        $trader = $this->user();
+        $other = $this->user();
+        $market = $this->market($other);
+        $this->deposit($trader, 1000);
+        $this->deposit($other, 9000);
+        $this->bet($trader, $market, 100);
+        $this->bet($other, $market, 500);
+        $this->market($other, 'pending');
+        $this->actingAs($trader)->get('/dashboard')->assertOk()->assertInertia(fn (Assert $a) => $a
+            ->where('page', 'dashboard')->where('balance', 900)
+            ->where('stats.active', 1)->where('stats.engaged', 100)->where('stats.pending', 0)
+            ->has('recentActivity', 2)->has('markets.data', 1)
+            ->where('recentActivity.0.amount', 100)->where('recentActivity.1.amount', 1000));
+    }
+
+    public function test_role_landing_pages_and_all_admin_reads_are_protected(): void
+    {
+        $this->get('/dashboard')->assertRedirect('/login');
+        $admin = $this->user(true);
+        $this->actingAs($admin)->get('/dashboard')->assertRedirect('/admin');
+        $market = $this->market($admin, 'pending');
+        $this->get('/admin/markets/'.$market)->assertOk()->assertInertia(fn (Assert $a) => $a->where('adminView', true)->where('market.id', $market));
+        $this->post('/logout');
+        $admin->password = Hash::make('admin-test-password');
+        $admin->save();
+        $this->post('/login', ['email' => $admin->email, 'password' => 'admin-test-password'])->assertRedirect('/admin');
+        $trader = $this->user();
+        foreach (['/admin', '/admin/markets', '/admin/markets/1', '/admin/users', '/admin/pipeline'] as $path) {
+            $this->actingAs($trader)->get($path)->assertForbidden();
+        }
     }
 
     public function test_deposits_withdrawals_and_idempotency_keep_ledger_balanced(): void

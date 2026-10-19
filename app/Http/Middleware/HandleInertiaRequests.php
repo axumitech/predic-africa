@@ -10,6 +10,14 @@ class HandleInertiaRequests extends Middleware
 {
     protected $rootView = 'app';
 
+    public function handle(Request $request, \Closure $next)
+    {
+        $response = parent::handle($request, $next);
+        $response->headers->set('Cache-Control', 'private, no-store');
+
+        return $response;
+    }
+
     public function share(Request $request): array
     {
         return [...parent::share($request),

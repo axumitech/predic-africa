@@ -16,7 +16,7 @@ export default memo(function AppLogin() {
 <span>{"Retour à l'accueil"}</span>
 </button>
 
-<img src="/HOR_WG.png" alt={"Wegame Logo"} className={"brand-img"} style={{"height":"32px","width":"auto"}} />
+<img src="/HOR_WG.png" alt={"PredicAfrica"} className={"brand-img"} style={{"height":"32px","width":"auto"}} />
 </div>
 
 
@@ -94,7 +94,7 @@ export default memo(function AppLogin() {
 <div className={"form-group"} id={"group-login-email"} style={{"display":"none"}}>
 <label htmlFor={"login-email"}>{"Adresse Email"}</label>
 
-<input type={"email"} id={"login-email"} placeholder={"ablaye.diop@predicafrika.com"} />
+<input type={"email"} id={"login-email"} placeholder={"ablaye.diop@predicafrica.com"} />
 </div>
 
 

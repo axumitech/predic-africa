@@ -11,6 +11,6 @@ export default function OriginalHome({ authenticated }: { authenticated: boolean
         if (!target) return;
         event.preventDefault();
         event.stopPropagation();
-        router.visit(authenticated ? '/markets' : '/login');
+        router.visit(authenticated ? '/dashboard' : '/login');
     }}><Suspense fallback={<div role="status">Chargement…</div>}><Prototype /></Suspense></div>;
 }

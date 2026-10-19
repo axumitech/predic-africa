@@ -111,3 +111,12 @@ Voir [docs/architecture.md](docs/architecture.md). L’accueil reprend les compo
 Les paiements Mobile Money réels, le P2P, la conversion multidevise, le SMS/USSD opérateur, la réinitialisation de mot de passe par e-mail, les événements temps réel et les tests de charge PostgreSQL ne sont pas implémentés dans le nouvel espace. Les fonctions de langue, région et USSD fictif du prototype restent sur `/demo`. Les documents d’origine dans `docs/original` décrivent une ambition produit plus large que cette démonstration.
 
 Cette livraison n’est pas une certification de production : les conditions de l’exploitant, les politiques de conservation et les intégrations externes nécessitent un chantier distinct. Les soldes et comptes du prototype ne sont pas importés automatiquement.
+
+### Espaces et navigation
+
+- `/dashboard` : accueil personnel du trader (solde, positions, activité et marchés ouverts).
+- `/admin` : pilotage réservé aux administrateurs (modération, comptes, support et journal).
+- `/admin/markets/{id}` : fiche de gestion d’un marché, distincte de la fiche de participation `/markets/{id}`.
+- La connexion ouvre l’espace du rôle ; une destination privée demandée avant connexion reste prioritaire et conserve ses contrôles d’accès.
+- Un administrateur peut consulter l’espace trader via le lien dédié. Cela ne change jamais son rôle ou ses droits.
+- Les statistiques et activités personnelles sont filtrées côté serveur par utilisateur. Les pages et opérations d’administration vérifient le rôle côté serveur.

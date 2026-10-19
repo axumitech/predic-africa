@@ -16,9 +16,6 @@ await page.route('**/api/predictions', route => route.fulfill({ status: 503, jso
 await page.route('**/api/markets', route => route.fulfill({ status: 503, json: { status: 'unavailable', data: [] } }));
 try {
     await page.goto(base + '/demo', { waitUntil: 'domcontentloaded' });
-    await page.locator('#btn-enter-bourse').waitFor();
-    await page.locator('#btn-enter-bourse').click();
-    await page.locator('#btn-demo-trader').click();
     await page.locator('#view-dashboard.active').waitFor();
     await page.locator('#predictions-catalog .predict-card').first().waitFor();
     assert.equal((await page.locator('#user-balance').innerText()).replace(/\s/g, ''), '15000');
@@ -41,8 +38,6 @@ try {
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('pa_user_bets')).length), 1);
 
     await page.reload();
-    await page.locator('#btn-enter-bourse').click();
-    await page.locator('#btn-demo-trader').click();
     await page.waitForFunction(() => document.getElementById('user-balance').textContent.replace(/\s/g, '') === '14000');
     await page.locator('#btn-logout-trigger').click();
     await page.locator('#btn-demo-admin').click();

@@ -1,0 +1,38 @@
+/* Registration shares the login identity; small screens are the baseline. */
+.pa-register .pa-login-form-area { max-width: 440px; padding: 24px 0; }
+.pa-register .pa-login-form { gap: 16px; }
+.pa-register .pa-login-field { gap: 7px; }
+.pa-register .pa-login-field input { font-size: 16px; height: 50px; }
+.pa-register .pa-login-welcome h1 { font-size: clamp(30px, 3vw, 40px); }
+.pa-register .pa-login-welcome p { font-size: 14px; margin-bottom: 24px; line-height: 1.7; }
+.pa-register-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
+.pa-register-label label { font-size: 13px; font-weight: 600; color: #1e293b; }
+.pa-register-label button { font-size: 12px; color: #58677e; cursor: pointer; min-height: 44px; margin: -11px 0; padding: 0 6px; }
+.pa-register-hint, .pa-register-match { font-size: 12px; line-height: 1.5; color: #64748b; }
+.pa-register-match { color: #285c48; }
+.pa-register .pa-login-submit { min-height: 52px; font-size: 14px; margin-top: 5px; }
+.pa-register .pa-login-submit > span { position: absolute; right: 18px; font-size: 20px; }
+.pa-register .pa-login-register { font-size: 13px; margin: 12px 0 16px; }
+.pa-register .pa-login-register a, .pa-register .pa-login-footer a, .pa-register .pa-login-top a { display: inline-flex; align-items: center; min-height: 44px; }
+.pa-register-demo { display: flex; align-items: center; gap: 14px; border-top: 1px solid #e2e8f0; padding-top: 18px; }
+.pa-register-demo > span { background: #f5f0df; border-radius: 12px; color: #957112; width: 42px; height: 42px; display: grid; place-items: center; font-size: 24px; flex-shrink: 0; }
+.pa-register-demo p { font-size: 12px; line-height: 1.9; color: #64748b; margin: 0; }
+.pa-register-demo a { color: #0f2244; font-weight: 600; display: inline-flex; min-height: 32px; align-items: center; }
+.pa-register-steps { padding: 0; margin: 32px 0 0; list-style: none; display: grid; gap: 24px; }
+.pa-register-steps li { display: flex; gap: 16px; align-items: flex-start; }
+.pa-register-steps li > span { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border: 1px solid #f0b40b35; background: #f0b40b0a; border-radius: 12px; font-size: 12px; color: #f0b40b; }
+.pa-register-steps strong { display: block; font-size: 14px; font-weight: 500; }
+.pa-register-steps p { margin: 5px 0 0; font-size: 12px; color: #a8bad5; line-height: 1.6; }
+.pa-register-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (min-width: 801px) {
+    .pa-register .pa-login-story { position: sticky; top: 0; height: 100svh; min-height: 680px; }
+    .pa-register .pa-login-access { padding-top: 20px; padding-bottom: 16px; }
+    .pa-register .pa-login-story h2 { font-size: clamp(32px, 3.2vw, 50px); }
+    .pa-register .pa-login-story-body { padding: 32px 0; }
+}
+@media (max-width: 800px) {
+    .pa-register .pa-login-story { padding: 20px; }
+    .pa-register .pa-login-story-note { max-width: 130px; }
+    .pa-register .pa-login-access { padding: 12px 20px 20px; }
+    .pa-register .pa-login-form-area { padding-top: 18px; }
+}

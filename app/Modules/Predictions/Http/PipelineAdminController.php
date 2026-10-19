@@ -7,6 +7,7 @@ use App\Modules\Predictions\Infrastructure\PipelineClient;
 use App\Modules\Predictions\Infrastructure\PipelineUnavailable;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -15,7 +16,7 @@ class PipelineAdminController extends Controller
 {
     public function generate(Request $request, PipelineClient $client)
     {
-        abort_unless($request->user()->role === 'admin', 403);
+        Gate::authorize('admin');
         try {
             $client->generate();
         } catch (\Throwable $exception) {
@@ -30,7 +31,7 @@ class PipelineAdminController extends Controller
 
     public function import(Request $request, PipelineClient $client)
     {
-        abort_unless($request->user()->role === 'admin', 403);
+        Gate::authorize('admin');
         $data = $request->validate(['id' => 'required|integer|min:1']);
         try {
             $items = $client->read('markets', null)['data'];

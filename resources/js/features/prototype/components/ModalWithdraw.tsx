@@ -67,7 +67,7 @@ export default memo(function ModalWithdraw() {
 </div>
 
 <div className={"ussd-body"}>
-<p className={"ussd-instruction"} id={"withdraw-ussd-instruction-text"}>{"\n                            Une notification de retrait mobile money a été poussée vers votre numéro. Saisissez votre code PIN secret pour confirmer la réception des fonds.\n                        "}</p>
+<p className={"ussd-instruction"} id={"withdraw-ussd-instruction-text"}>{"\n                            Une notification de retrait mobile money a été poussée vers votre numéro. Saisissez votre code fictif pour confirmer la réception des fonds.\n                        "}</p>
 
 <div className={"ussd-amount-summary"}>
 <span>{"Montant à recevoir :"}</span>

@@ -14,7 +14,8 @@ class PaymentController extends Controller
     {
         $data = $request->validate(['kind' => ['required', Rule::in(['deposit', 'withdraw'])], 'amount' => 'required|integer|min:100|max:1000000', 'reference' => 'required|uuid']);
         DB::transaction(function () use ($request, $data, $ledger) {
-            DB::table('users')->where('id', $request->user()->id)->lockForUpdate()->first();
+            $user = DB::table('users')->where('id', $request->user()->id)->lockForUpdate()->firstOrFail();
+            abort_if($user->suspended, 403, 'Compte suspendu.');
             $ledger->transfer($request->user()->id, $data['reference'], $data['kind'] === 'deposit' ? 'Dépôt simulé' : 'Retrait simulé', (int) $data['amount'], $data['kind'] === 'deposit');
         }, 3);
 

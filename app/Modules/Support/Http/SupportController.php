@@ -5,6 +5,7 @@ namespace App\Modules\Support\Http;
 use App\Http\Controllers\Controller;
 use App\Modules\Notifications\Notifier;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -29,7 +30,7 @@ class SupportController extends Controller
         DB::transaction(function () use ($request, $data, $id) {
             $ticket = DB::table('support_tickets')->where('id', $id)->lockForUpdate()->first();
             abort_unless($ticket, 404);
-            abort_unless($request->user()->role === 'admin' || $ticket->user_id === $request->user()->id, 403);
+            Gate::authorize('access-ticket', $ticket);
             DB::table('support_messages')->insert(['ticket_id' => $id, 'user_id' => $request->user()->id, 'body' => $data['body'], 'created_at' => now()]);
             DB::table('support_tickets')->where('id', $id)->update(['status' => $data['status'], 'updated_at' => now()]);
             if ($request->user()->id !== $ticket->user_id) {
