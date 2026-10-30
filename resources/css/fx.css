@@ -1,0 +1,17 @@
+.p-fx-notice { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 22px; margin-bottom: 24px; border: 1px solid #d5e0ec; border-left: 3px solid #d5a12d; border-radius: 14px; background: #fff; }
+.p-fx-notice strong { color: #142943; font-size: 13px; }
+.p-fx-notice p { margin: 6px 0 0; color: #5a6e87; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.p-fx-notice button { flex-shrink: 0; min-height: 44px; padding: 10px 14px; border: 1px solid #d8e1ed; border-radius: 10px; background: #f5f8fc; color: #253c58; font-size: 12px; font-weight: 600; }
+.p-fx-notice--stale { background: #fffaf0; border-color: #eedba8; border-left-color: #bf8b1d; }
+.p-fx-notice button:disabled { opacity: .6; cursor: wait; }
+.p-quote-expiry { padding: 12px 14px; margin-block: 14px; border-radius: 10px; background: #f0f5fb; color: #314c6b; font-size: 13px; line-height: 1.6; }
+.p-quote-expiry--expired { background: #fff3dc; color: #80570f; }
+.p-native-order .p-estimate strong { overflow-wrap: anywhere; }
+.p-market-minimum { margin: 12px 0; color: #5a6e87; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.p-currency-balances { margin-bottom: 24px; }
+.p-currency-balances>p { color: #64758b; font-size: 12px; line-height: 1.8; }
+.p-currency-balances dl { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); gap: 12px; margin-top: 16px; }
+.p-currency-balances dl>div { min-width: 0; padding: 14px; border: 1px solid #dbe4ee; border-radius: 12px; background: #f8fafd; }
+.p-currency-balances dt { font-size: 11px; letter-spacing: .06em; color: #64758b; }
+.p-currency-balances dd { margin: 8px 0 0; color: #142943; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+@media(max-width:639px) { .p-fx-notice { align-items: stretch; flex-direction: column; gap: 12px; padding: 16px; }.p-fx-notice button { align-self: flex-start; } }

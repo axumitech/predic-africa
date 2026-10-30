@@ -1,0 +1,3 @@
+-r requirements.txt
+# FastAPI TestClient uses httpx; only needed for tests.
+httpx

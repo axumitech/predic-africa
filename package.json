@@ -7,7 +7,9 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test:e2e": "node tests/browser/platform.mjs",
-    "test:e2e:legacy": "node tests/browser/smoke.mjs"
+    "test:ux": "node tests/browser/ux.mjs",
+    "test:motion": "node tests/browser/motion.mjs",
+    "test:fx": "node tests/browser/fx.mjs"
   },
   "dependencies": {
     "@inertiajs/react": "^3.0.0",

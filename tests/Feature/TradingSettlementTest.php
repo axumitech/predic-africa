@@ -28,7 +28,7 @@ class TradingSettlementTest extends TestCase
 
     private function fund(User $user, int $amount = 1000): void
     {
-        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt simulé', $amount, true));
+        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', $amount, true));
     }
 
     private function place(User $user, int $market, string $outcome = 'yes', int $amount = 101, ?string $reference = null): void

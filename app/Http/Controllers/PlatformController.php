@@ -16,6 +16,7 @@ class PlatformController extends Controller
         $user = $request->user();
         $data = [];
         if ($page === 'home') {
+            $data['stats'] = ['volume' => (int) DB::table('positions')->sum('stake'), 'open_markets' => DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->count()];
             $data['markets'] = DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->orderBy('closes_at')->paginate(3);
         }
         if ($page === 'dashboard' && $user->role === 'admin') {
@@ -25,13 +26,13 @@ class PlatformController extends Controller
             $positions = DB::table('positions')->where('user_id', $user->id);
             $data['stats'] = [
                 'active' => (clone $positions)->where('status', 'open')->count(),
-                'engaged' => (int) (clone $positions)->where('status', 'open')->sum('stake'),
-                'potential' => (int) (clone $positions)->where('status', 'open')->sum('payout'),
+                'engaged' => (int) (clone $positions)->where('status', 'open')->sum(DB::raw('COALESCE(wallet_stake, stake)')),
+                'potential' => (int) (clone $positions)->where('status', 'open')->sum(DB::raw('COALESCE(wallet_payout, payout)')),
                 'won' => (clone $positions)->where('status', 'won')->count(),
                 'pending' => DB::table('markets')->where('creator_id', $user->id)->where('status', 'pending')->count(),
             ];
             $data['markets'] = DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->orderBy('closes_at')->paginate(6);
-            $data['recentActivity'] = DB::table('ledger_transactions')->where('user_id', $user->id)->select('id', 'kind', 'amount', 'created_at')->orderByDesc('id')->limit(5)->get();
+            $data['recentActivity'] = DB::table('ledger_transactions')->where('user_id', $user->id)->select('id', 'kind', 'amount', 'currency', 'created_at')->orderByDesc('id')->limit(5)->get();
         }
         if (str_starts_with($page, 'admin')) {
             Gate::authorize('admin');
@@ -69,7 +70,7 @@ class PlatformController extends Controller
             $data['stats'] = [
                 'volume' => (int) DB::table('positions')->sum('stake'),
                 'active' => DB::table('positions')->where('status', 'open')->count(),
-                'paid' => (int) DB::table('ledger_transactions')->where('kind', 'Gain')->sum('amount'),
+                'paid' => (int) DB::table('positions')->where('status', 'won')->sum('payout'),
             ];
         }
         if ($page === 'market') {
@@ -85,19 +86,36 @@ class PlatformController extends Controller
             $filters = $request->validate(['q' => 'nullable|string|max:100', 'status' => 'nullable|in:open,won,lost,refunded']);
             $data['filters'] = (object) $filters;
             $data['positions'] = DB::table('positions')->join('markets', 'markets.id', '=', 'positions.market_id')
+                ->leftJoin('fx_quotes', 'fx_quotes.id', '=', 'positions.fx_quote_id')
                 ->where('positions.user_id', $user->id)->when($filters['status'] ?? null, fn ($q, $status) => $q->where('positions.status', $status))
                 ->when($filters['q'] ?? null, fn ($q, $term) => $q->where('markets.title', 'like', '%'.$term.'%'))
-                ->select('positions.*', 'markets.title', 'markets.closes_at', 'markets.result')->orderByDesc('positions.id')->paginate(20)->withQueryString();
+                ->select('positions.*', 'markets.title', 'markets.closes_at', 'markets.result', 'fx_quotes.rate as fx_rate', 'fx_quotes.as_of as fx_as_of')->orderByDesc('positions.id')->paginate(20)->withQueryString();
+        }
+        if ($page === 'wallet') {
+            $currency = DB::table('payment_wallets')->where('user_id', $user->id)->value('currency') ?? 'XAF';
+            $data['ndsgpay'] = [
+                'enabled' => app(\App\Modules\Payments\Ndsgpay::class)->ready(),
+                'min_amount' => (string) config('payments.min_amount'), 'max_amount' => (string) config('payments.max_amount'),
+                'scale' => \App\Modules\Money\Money::scale($currency),
+                'currency' => $currency,
+                'correspondents' => array_column(app(\App\Modules\Payments\Capabilities::class)->forAccount($user), 'correspondent'),
+                'correspondent_labels' => collect(app(\App\Modules\Payments\Capabilities::class)->forAccount($user))
+                    ->mapWithKeys(fn ($capability) => [$capability['correspondent'] => config('ndsgpay_operators.'.$capability['correspondent'].'.name', $capability['correspondent'])])->all(),
+                'payoutsEnabled' => false,
+                'balance' => (int) DB::table('payment_wallets')->where('user_id', $request->user()->id)->value('balance'),
+                'payments' => DB::table('payments')->where('user_id', $request->user()->id)->latest('id')->limit(30)
+                    ->get(['id', 'reference', 'kind', 'amount', 'currency', 'status', 'local_state', 'created_at'])->map(function ($payment) { $payment->amount = (string) $payment->amount; return $payment; }),
+            ];
         }
         if (in_array($page, ['transactions', 'wallet'])) {
             $filters = $request->validate(['kind' => 'nullable|string|max:40', 'q' => 'nullable|string|max:100']);
             $data['filters'] = (object) $filters;
             $ledger = DB::table('ledger_transactions')->where('user_id', $user->id);
             $data['walletStats'] = [
-                'engaged' => (int) DB::table('positions')->where('user_id', $user->id)->where('status', 'open')->sum('stake'),
+                'engaged' => (int) DB::table('positions')->where('user_id', $user->id)->where('status', 'open')->sum(DB::raw('COALESCE(wallet_stake, stake)')),
                 'gains' => (int) (clone $ledger)->where('kind', 'Gain')->sum('amount'),
-                'deposits' => (int) (clone $ledger)->where('kind', 'Dépôt simulé')->sum('amount'),
-                'withdrawals' => (int) (clone $ledger)->where('kind', 'Retrait simulé')->sum('amount'),
+                'deposits' => (int) (clone $ledger)->where('kind', 'Dépôt NDSGPay')->sum('amount'),
+                'withdrawals' => (int) (clone $ledger)->where('kind', 'Retrait NDSGPay')->sum('amount'),
             ];
             $data['transactions'] = $ledger
                 ->when($filters['kind'] ?? null, fn ($q, $kind) => $q->where('kind', $kind))
@@ -123,10 +141,11 @@ class PlatformController extends Controller
         if ($page === 'admin-users') {
             $data['users'] = DB::table('users')->select('id', 'name', 'email', 'role', 'suspended', 'created_at')
                 ->selectSub(DB::table('accounts')->selectRaw('COALESCE(SUM(balance), 0)')->whereColumn('user_id', 'users.id'), 'balance')
+                ->selectSub(DB::table('payment_wallets')->select('currency')->whereColumn('user_id', 'users.id'), 'wallet_currency')
                 ->orderByDesc('id')->paginate(20);
         }
         if ($page === 'admin') {
-            $data['recentActivity'] = DB::table('ledger_transactions')->select('id', 'kind', 'amount', 'created_at')->orderByDesc('id')->limit(5)->get();
+            $data['recentActivity'] = DB::table('ledger_transactions')->where('currency', 'XAF')->select('id', 'kind', 'amount', 'currency', 'created_at')->orderByDesc('id')->limit(5)->get();
             $data['stats'] = [
                 'open_markets' => DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->count(),
                 'new_users' => DB::table('users')->where('created_at', '>=', now()->subDays(7))->count(),
@@ -135,11 +154,16 @@ class PlatformController extends Controller
                 'pending' => DB::table('markets')->where('status', 'pending')->count(),
                 'volume' => (int) DB::table('positions')->sum('stake'),
                 'tickets' => DB::table('support_tickets')->where('status', 'open')->count(),
-                'ledger_balance' => (int) DB::table('ledger_entries')->sum('amount'),
+                'ledger_balance' => DB::table('ledger_entries')->selectRaw('currency, SUM(amount) as total')->groupBy('currency')->get()->filter(fn ($group) => (int) $group->total !== 0)->count(),
             ];
         }
+        if ($page === 'admin') {
+            $data['currencyBalances'] = DB::table('payment_wallets')->select('currency')->selectRaw('SUM(balance) as balance')
+                ->groupBy('currency')->orderBy('currency')->get()->map(function ($row) { $row->balance = (string) $row->balance; return $row; });
+        }
         if (in_array($page, ['dashboard', 'admin'])) {
-            $daily = DB::table('ledger_transactions')
+            $activityCurrency = $page === 'admin' ? 'XAF' : (DB::table('payment_wallets')->where('user_id', $user->id)->value('currency') ?? 'XAF');
+            $daily = DB::table('ledger_transactions')->where('currency', $activityCurrency)
                 ->when($page !== 'admin', fn ($q) => $q->where('user_id', $user->id))
                 ->where('created_at', '>=', now()->subDays(6)->startOfDay())
                 ->selectRaw('DATE(created_at) as label, SUM(amount) as value')
@@ -156,7 +180,7 @@ class PlatformController extends Controller
                 if (! $exception instanceof PipelineUnavailable) {
                     report($exception);
                 }
-                $data['pipeline'] = ['status' => 'unavailable', 'data' => [], 'simulation' => true];
+                $data['pipeline'] = ['status' => 'unavailable', 'data' => []];
             }
         }
 

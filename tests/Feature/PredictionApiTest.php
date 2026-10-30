@@ -2,25 +2,32 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class PredictionApiTest extends TestCase
 {
-    use \Illuminate\Foundation\Testing\RefreshDatabase;
-    public function test_legacy_demo_remains_available(): void
+    use RefreshDatabase;
+
+    protected function setUp(): void
     {
-        $this->withoutVite()->get('/demo')->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->component('Prototype', false)->where('mode', 'demo'));
+        parent::setUp();
+        config(['predictions.enabled' => true]);
+        Http::preventStrayRequests();
+    }
+
+    public function test_removed_route_is_not_available(): void
+    {
+        $this->withoutVite()->get('/demo')->assertNotFound();
     }
 
     public function test_pipeline_is_proxied_and_cached(): void
     {
         Http::preventStrayRequests();
-        Http::fake(['*/api/predictions*' => Http::response(['data' => [['id' => 42, 'domain' => 'football']]])]);
+        Http::fake(['*/api/predictions*' => Http::response(['simulation' => false, 'data' => [['id' => 42, 'domain' => 'football']]])]);
 
         $this->getJson('/api/predictions?domain=football')->assertOk()->assertJsonPath('data.0.id', 42);
         $this->getJson('/api/predictions?domain=football')->assertOk();
@@ -38,7 +45,7 @@ class PredictionApiTest extends TestCase
 
     public function test_malformed_pipeline_response_is_rejected(): void
     {
-        Http::fake(['*' => Http::response(['data' => 'invalid'])]);
+        Http::fake(['*' => Http::response(['simulation' => false, 'data' => 'invalid'])]);
         $this->getJson('/api/predictions')->assertStatus(503);
     }
 
@@ -53,7 +60,7 @@ class PredictionApiTest extends TestCase
     {
         $this->freezeTime();
         Log::spy();
-        Http::fakeSequence()->pushStatus(503)->push(['data' => [['id' => 42]]]);
+        Http::fakeSequence()->pushStatus(503)->push(['simulation' => false, 'data' => [['id' => 42]]]);
         $this->getJson('/api/predictions')->assertStatus(503)->assertHeader('Retry-After', '30');
         $this->getJson('/api/markets')->assertStatus(503);
         $this->getJson('/api/predictions?domain=football')->assertStatus(503);
@@ -102,10 +109,17 @@ class PredictionApiTest extends TestCase
 
     public function test_cache_is_scoped_to_the_pipeline_url(): void
     {
-        Http::fakeSequence()->push(['data' => [['id' => 1]]])->push(['data' => [['id' => 2]]]);
+        Http::fakeSequence()->push(['simulation' => false, 'data' => [['id' => 1]]])->push(['simulation' => false, 'data' => [['id' => 2]]]);
         $this->getJson('/api/markets')->assertJsonPath('data.0.id', 1);
         config(['predictions.url' => 'http://127.0.0.1:8102']);
         $this->getJson('/api/markets')->assertJsonPath('data.0.id', 2);
         Http::assertSentCount(2);
+    }
+
+    public function test_synthetic_predictions_are_never_exposed_or_cached(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'success', 'simulation' => true, 'data' => [['id' => 7, 'winner' => 'random']]])]);
+        $this->getJson('/api/predictions')->assertStatus(503)->assertJsonPath('data', []);
+        Http::assertSentCount(1);
     }
 }

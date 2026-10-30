@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode, type ButtonHTMLAttr
 import { createPortal } from 'react-dom';
 import { Link } from '@inertiajs/react';
 import '../../css/components.css';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'quiet' | 'danger'; loading?: boolean };
 export function Button({ variant = 'primary', loading, children, className = '', disabled, ...props }: ButtonProps) { return <button type="button" {...props} disabled={disabled || loading} aria-busy={loading || undefined} className={`ds-button ds-button--${variant} ${className}`}>{loading ? <span className="ds-spinner" aria-hidden="true"/> : null}{children}</button>; }
@@ -19,23 +20,55 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
 export function StatusBadge({ status }: { status: string }) { const names: Record<string,string> = { open:'Ouvert', pending:'À modérer', won:'Gagnée', lost:'Perdue', refunded:'Remboursée', resolved:'Résolu', rejected:'Rejeté', void:'Annulé', closed:'Fermé' }; return <Badge tone={['open','won'].includes(status) ? 'success' : ['lost','rejected'].includes(status) ? 'danger' : status === 'pending' ? 'warning' : 'neutral'}>{names[status] || status}</Badge>; }
 export function Tooltip({ label, children }: { label: string; children: ReactNode }) { const id = useId(); return <span className="ds-tooltip" tabIndex={0} aria-describedby={id}>{children}<span role="tooltip" id={id}>{label}</span></span>; }
 export function Dropdown({ label, children }: { label: string; children: ReactNode }) { return <details className="ds-dropdown"><summary>{label}</summary><div>{children}</div></details>; }
-export function Modal({ open, title, children, onClose, busy = false, variant = 'modal' }: { open: boolean; title: string; children: ReactNode; onClose: () => void; busy?: boolean; variant?: 'modal' | 'drawer' | 'sheet' }) {
-    const ref = useRef<HTMLDialogElement>(null); const id = useId();
-    useEffect(() => { if (!open || !ref.current) return; const dialog=ref.current; const previous = document.body.style.overflow; const focused = document.activeElement as HTMLElement | null; dialog.showModal(); document.body.style.overflow='hidden'; return () => { dialog.close(); document.body.style.overflow=previous; focused?.focus(); }; }, [open]);
+export function Modal({ open, title, children, onClose, busy = false, variant = 'modal', footer, id: dialogId }: { open: boolean; title: string; children: ReactNode; onClose: () => void; busy?: boolean; variant?: 'modal' | 'drawer' | 'sheet'; footer?: ReactNode; id?: string }) {
+    const ref = useRef<HTMLDialogElement>(null);
+    const id = useId();
+    useBodyScrollLock(open);
+    useEffect(() => {
+        if (!open || !ref.current) return;
+        const dialog = ref.current;
+        const focused = document.activeElement as HTMLElement | null;
+        if (!dialog.open) dialog.showModal();
+        return () => {
+            dialog.close();
+            if (focused?.isConnected) focused.focus({ preventScroll: true });
+        };
+    }, [open]);
     if (!open) return null;
-    return createPortal(<dialog ref={ref} className={`ds-dialog ds-dialog--${variant}`} aria-labelledby={id} onCancel={e=>{e.preventDefault();if(!busy)onClose();}} onClick={e=>{if(e.target===e.currentTarget&&!busy) {const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)onClose();}}}><header className="ds-dialog__header"><h2 id={id}>{title}</h2><IconButton label="Fermer" variant="quiet" disabled={busy} onClick={onClose}>×</IconButton></header><div className="ds-dialog__body">{children}</div></dialog>, document.body);
+    return createPortal(<dialog id={dialogId} ref={ref} tabIndex={-1} onKeyDown={e => {
+        if (e.key !== 'Tab') return;
+        e.stopPropagation();
+        const items = [...e.currentTarget.querySelectorAll<HTMLElement>('a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex="-1"])')].filter(el => el.getClientRects().length > 0);
+        const first = items[0], last = items.at(-1);
+        if (!first) { e.preventDefault(); e.currentTarget.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }} className={`ds-dialog ds-dialog--${variant}`} aria-labelledby={id} aria-busy={busy || undefined} onCancel={e => { e.preventDefault(); e.stopPropagation(); if (!busy) onClose(); }} onClick={e => {
+        if (e.target !== e.currentTarget || busy) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) onClose();
+    }}>
+        <header className="ds-dialog__header"><h2 id={id}>{title}</h2><IconButton label="Fermer" variant="quiet" disabled={busy} onClick={onClose}>×</IconButton></header>
+        <div className="ds-dialog__body">{children}</div>
+        {footer && <footer className="ds-dialog__actions">{footer}</footer>}
+    </dialog>, document.body);
 }
 export function Drawer(props: Omit<Parameters<typeof Modal>[0], 'variant'>) { return <Modal {...props} variant="drawer"/>; }
-export function ConfirmationModal({ open, title = 'Vérifier avant de confirmer', children, onClose, onConfirm, busy, confirmLabel = 'Confirmer', danger = false }: { open: boolean; title?: string; children: ReactNode; onClose: () => void; onConfirm: () => void; busy?: boolean; confirmLabel?: string; danger?: boolean }) { return <Modal open={open} title={title} onClose={onClose} busy={busy}><div className="ds-confirm-content">{children}</div><div className="ds-dialog__actions"><Button autoFocus variant="secondary" disabled={busy} onClick={onClose}>Revenir</Button><Button variant={danger ? 'danger' : 'primary'} loading={busy} onClick={onConfirm}>{busy ? 'Enregistrement…' : confirmLabel}</Button></div></Modal>; }
+export function ConfirmationModal({ open, title = 'Vérifier avant de confirmer', children, onClose, onConfirm, busy, confirmLabel = 'Confirmer', danger = false, confirmDisabled = false }: { open: boolean; title?: string; children: ReactNode; onClose: () => void; onConfirm: () => void; busy?: boolean; confirmLabel?: string; danger?: boolean; confirmDisabled?: boolean }) {
+    return <Modal open={open} title={title} onClose={onClose} busy={busy} footer={<>
+        <Button autoFocus variant="secondary" disabled={busy} onClick={onClose}>Revenir</Button>
+        <Button variant={danger ? 'danger' : 'primary'} loading={busy} disabled={confirmDisabled} onClick={onConfirm}>{busy ? 'Enregistrement…' : confirmLabel}</Button>
+    </>}><div className="ds-confirm-content">{children}</div></Modal>;
+}
 export function Alert({ children, tone='info' }: { children: ReactNode; tone?: 'info' | 'error' | 'success' | 'warning' }) { return <div className={`ds-alert ds-alert--${tone}`} role={tone === 'error' ? 'alert' : 'status'}>{children}</div>; }
 export function Toast(props: Parameters<typeof Alert>[0]) { return <div className="ds-toast"><Alert {...props}/></div>; }
 export function Skeleton({ label = 'Chargement en cours' }: { label?: string }) { return <div className="ds-skeleton" role="status" aria-label={label}><span/><span/><span/><span className="ds-sr">{label}</span></div>; }
 export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) { return <section className="ds-empty"><span aria-hidden="true">◇</span><h3>{title}</h3>{children && <p>{children}</p>}{action}</section>; }
 export function ErrorState({ title='Impossible de charger ces données', children, retry }: { title?: string; children?: ReactNode; retry?: () => void }) { return <EmptyState title={title} action={retry && <Button variant="secondary" onClick={retry}>Réessayer</Button>}>{children}</EmptyState>; }
 export function Pagination({ current, last, previous, next }: { current: number; last: number; previous: string | null; next: string | null }) { if(last<2)return null;return <nav className="ds-pagination" aria-label="Pagination">{previous ? <Link href={previous}>← Précédent</Link> : <span/>}<span>{current} / {last}</span>{next ? <Link href={next}>Suivant →</Link> : <span/>}</nav>; }
-export function DataTable<T>({ caption, columns, rows, rowKey }: { caption: string; columns: { key: string; label: string; render: (row: T) => ReactNode }[]; rows: T[]; rowKey: (row: T) => string | number }) { return <div className="ds-table-wrap"><table className="ds-table" role="table"><caption>{caption}</caption><thead><tr role="row">{columns.map(c=><th scope="col" key={c.key}>{c.label}</th>)}</tr></thead><tbody>{rows.map(row=><tr role="row" key={rowKey(row)}>{columns.map(c=><td role="cell" key={c.key} data-label={c.label}>{c.render(row)}</td>)}</tr>)}</tbody></table></div>; }
+export function DataTable<T>({ caption, columns, rows, rowKey }: { caption: string; columns: { key: string; label: string; render: (row: T) => ReactNode }[]; rows: T[]; rowKey: (row: T) => string | number }) { return <div className="ds-table-wrap" role="region" aria-label={caption} tabIndex={0}><table className="ds-table" role="table"><caption>{caption}</caption><thead><tr role="row">{columns.map(c=><th scope="col" role="columnheader" key={c.key}>{c.label}</th>)}</tr></thead><tbody>{rows.map(row=><tr role="row" key={rowKey(row)}>{columns.map(c=><td role="cell" key={c.key} data-label={c.label}>{c.render(row)}</td>)}</tr>)}</tbody></table></div>; }
 export function StatCard({ label, value, detail }: { label:string; value:ReactNode; detail?:string }) { return <div className="ds-stat"><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</div>; }
-export function WalletCard({ balance, children }: { balance: string; children?:ReactNode }) { return <section className="ds-wallet"><span>Crédits disponibles</span><strong>{balance}</strong>{children}</section>; }
+export function WalletCard({ balance, children }: { balance: string; children?:ReactNode }) { return <section className="ds-wallet"><span>Solde disponible</span><strong>{balance}</strong>{children}</section>; }
 export function TransactionItem({ title, amount, detail, onClick }: { title: string; amount:string; detail:string; onClick?:()=>void }) { const content=<><span><strong>{title}</strong><small>{detail}</small></span><b>{amount}</b></>; return onClick ? <button className="ds-transaction" onClick={onClick}>{content}</button> : <div className="ds-transaction">{content}</div>; }
 export function PositionCard({ title, children, status }: { title:ReactNode; children:ReactNode; status:string }) {return <article className="ds-position"><header>{title}<StatusBadge status={status}/></header>{children}</article>;}
 export function ProbabilityBar({ yes, label = 'Probabilité implicite normalisée' }: { yes:number; label?:string }) { const value=Math.max(0,Math.min(100,yes));return <div className="ds-probability"><div className="ds-probability__labels"><span>Oui {value}%</span><span>Non {100-value}%</span></div><div className="ds-probability__track" role="img" aria-label={`${label} : Oui ${value} %, Non ${100-value} %`}><span style={{width:`${value}%`}}/></div></div>; }

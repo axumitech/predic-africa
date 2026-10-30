@@ -31,3 +31,9 @@ Thumbs.db
 /services/ai-pipeline/*.log
 /test-results/
 /playwright-report/
+
+# Retired service sources may retain local runtime files; never version their data.
+/legacy/retired-ai/**/venv/
+/legacy/retired-ai/**/.venv/
+/legacy/retired-ai/**/*.db
+/legacy/retired-ai/**/*.sqlite*

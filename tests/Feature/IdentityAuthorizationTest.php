@@ -59,7 +59,7 @@ class IdentityAuthorizationTest extends TestCase
     public function test_suspended_public_response_does_not_expose_auth_balance_or_notifications(): void
     {
         $user = User::factory()->create();
-        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt simulé', 1000, true));
+        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 1000, true));
         $this->actingAs($user);
         DB::table('users')->where('id', $user->id)->update(['suspended' => true]);
         $this->get('/')->assertForbidden()->assertInertia(fn (Assert $page) => $page
@@ -83,7 +83,7 @@ class IdentityAuthorizationTest extends TestCase
         foreach (['/dashboard', '/wallet', '/positions', '/transactions', '/profile', '/support', '/support/1', '/creator', '/notifications', '/markets', '/markets/1', '/predictions', '/admin', '/admin/users', '/admin/markets', '/admin/markets/1', '/admin/pipeline'] as $path) {
             $this->getJson($path)->assertUnauthorized();
         }
-        foreach (['/wallet', '/profile', '/markets', '/markets/1/positions', '/support', '/support/1', '/notifications/read', '/admin/markets/1/moderate', '/admin/markets/1/resolve', '/admin/users/1', '/admin/pipeline/import', '/admin/pipeline/generate'] as $path) {
+        foreach (['/wallet/ndsgpay', '/profile', '/markets', '/markets/1/positions', '/markets/1/quote', '/support', '/support/1', '/notifications/read', '/admin/markets/1/moderate', '/admin/markets/1/resolve', '/admin/users/1', '/admin/pipeline/import', '/admin/pipeline/generate'] as $path) {
             $this->postJson($path, [])->assertUnauthorized();
         }
         $this->assertDatabaseCount('ledger_transactions', 0);
@@ -110,6 +110,7 @@ class IdentityAuthorizationTest extends TestCase
     public function test_profile_and_registration_never_accept_privileged_fields(): void
     {
         $this->post('/register', ['name' => 'Account', 'email' => 'identity@example.test', 'password' => 'password-123',
+            'country' => 'GAB', 'currency' => 'XAF',
             'password_confirmation' => 'password-123', 'role' => 'admin', 'suspended' => true, 'auth_version' => 99,
             'email_verified_at' => now()->toISOString(), 'balance' => 10000])->assertSessionHasNoErrors();
         $user = User::firstOrFail();
@@ -186,7 +187,7 @@ class IdentityAuthorizationTest extends TestCase
         $other = User::factory()->create();
         $admin = User::factory()->create(['role' => 'admin']);
         foreach ([$owner, $other] as $user) {
-            DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt simulé', 1000, true));
+            DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 1000, true));
             $this->actingAs($user)->post('/support', ['subject' => 'Ticket privé '.$user->id, 'body' => 'Message privé du propriétaire'])->assertSessionHasNoErrors();
         }
         $otherTicket = DB::table('support_tickets')->where('user_id', $other->id)->value('id');
@@ -221,7 +222,8 @@ class IdentityAuthorizationTest extends TestCase
     {
         $user = User::factory()->create();
         $response = $this->actingAs($user)->get('/profile');
-        $response->assertOk()->assertInertia(fn (Assert $page) => $page->has('auth', 4)
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page->has('auth', 7)
+            ->where('auth.country', null)->where('auth.wallet_currency', 'XAF')
             ->missing('auth.password')->missing('auth.remember_token')->missing('auth.auth_version'));
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
         foreach (['password', 'remember_token', 'auth_version'] as $field) {
@@ -276,7 +278,7 @@ class IdentityAuthorizationTest extends TestCase
                 }
             };
         });
-        foreach (['/login', '/register', '/wallet', '/profile', '/admin/users/1'] as $path) {
+        foreach (['/login', '/register', '/wallet/ndsgpay', '/profile', '/admin/users/1'] as $path) {
             $this->postJson($path, [])->assertStatus(419);
         }
     }

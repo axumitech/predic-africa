@@ -5,22 +5,25 @@ import '../features/platform/login.css';
 import '../features/platform/register.css';
 
 type Field = 'name' | 'email' | 'password' | 'password_confirmation';
+type RegistrationField = Field | 'country' | 'currency';
+type CountryOption = { code: string; name: string; currencies: { code: string; name: string }[] };
 const fields: { key: Field; label: string; placeholder: string; autoComplete: string; maxLength?: number }[] = [
     { key: 'name', label: 'Nom complet', placeholder: 'Votre nom et prénom', autoComplete: 'name', maxLength: 100 },
     { key: 'email', label: 'Adresse e-mail', placeholder: 'vous@exemple.com', autoComplete: 'email', maxLength: 255 },
     { key: 'password', label: 'Mot de passe', placeholder: 'Au moins 10 caractères', autoComplete: 'new-password' },
     { key: 'password_confirmation', label: 'Confirmer le mot de passe', placeholder: 'Saisissez-le à nouveau', autoComplete: 'new-password' },
 ];
-export default function Register() {
-    const form = useForm({ name: '', email: '', password: '', password_confirmation: '' });
-    const inputs = useRef<Partial<Record<Field, HTMLInputElement | null>>>({});
+export default function Register({ countries }: { countries: CountryOption[] }) {
+    const form = useForm({ country: '', currency: '', name: '', email: '', password: '', password_confirmation: '' });
+    const inputs = useRef<Partial<Record<RegistrationField, HTMLInputElement | HTMLSelectElement | null>>>({});
+    const country = countries.find(option => option.code === form.data.country);
     const [visible, setVisible] = useState(false);
     const strength = Math.min(4, Number(form.data.password.length >= 10) + Number(form.data.password.length >= 14) + Number(/[a-z]/.test(form.data.password) && /[A-Z]/.test(form.data.password)) + Number(/[0-9]/.test(form.data.password) && /[^a-zA-Z0-9]/.test(form.data.password)));
     const matches = form.data.password_confirmation.length > 0 && form.data.password === form.data.password_confirmation;
     return <main className="pa-login pa-register">
         <Head title="Créer un compte — PredicAfrica" />
         <section className="pa-login-story" aria-label="PredicAfrica">
-            <Link href="/" className="pa-login-brand" aria-label="PredicAfrica — Accueil"><img src="/HOR_WG.png" alt="PredicAfrica" /></Link>
+            <Link href="/" className="pa-login-brand" aria-label="PredicAfrica — Accueil"><img width="1460" height="481" src="/HOR_WG.png" alt="PredicAfrica" /></Link>
             <div className="pa-login-story-body">
                 <span className="pa-login-eyebrow"><span /> VOS CONVICTIONS ONT UNE PLACE</span>
                 <h2>Votre regard.<br />Vos idées.<br /><em>Votre prochain coup d’avance.</em></h2>
@@ -31,7 +34,7 @@ export default function Register() {
                     <li><span>03</span><div><strong>Suivez vos positions</strong><p>Retrouvez vos résultats dans votre espace.</p></div></li>
                 </ol>
             </div>
-            <p className="pa-login-story-note">Démonstration · Crédits fictifs, sans valeur monétaire.</p>
+            <p className="pa-login-story-note">Votre pays. Votre monnaie. Votre portefeuille personnel.</p>
         </section>
         <section className="pa-login-access" aria-labelledby="pa-register-title">
             <header className="pa-login-top"><Link href="/">← Retour à l’accueil</Link><span>BIENVENUE SUR PREDICAFRICA</span></header>
@@ -47,10 +50,41 @@ export default function Register() {
                         return;
                     }
                     form.post('/register', {
-                        onError: errors => { const field = fields.find(({ key }) => errors[key]); if (field) inputs.current[field.key]?.focus(); },
+                        onError: errors => { const field = (['country', 'currency', ...fields.map(({ key }) => key)] as RegistrationField[]).find(key => errors[key]); if (field) inputs.current[field]?.focus(); },
                         onSuccess: () => form.reset('password', 'password_confirmation'),
                     });
                 }}>
+                    <fieldset className="pa-register-region">
+                        <legend>Votre pays et votre portefeuille</legend>
+                        <p>Choisissez votre pays, puis confirmez la monnaie de votre portefeuille.</p>
+                        <div className="pa-register-region-fields">
+                            <div className="pa-login-field">
+                                <label htmlFor="pa-register-country">Pays de résidence</label>
+                                <select ref={element => { inputs.current.country = element; }} id="pa-register-country" name="country" autoComplete="country" required value={form.data.country} onChange={event => {
+                                    form.setData(data => ({ ...data, country: event.target.value, currency: '' }));
+                                    form.clearErrors('country', 'currency');
+                                }} aria-invalid={!!form.errors.country} aria-describedby={form.errors.country ? 'pa-register-country-error' : undefined}>
+                                    <option value="" disabled>Choisir mon pays</option>
+                                    {countries.map(option => <option key={option.code} value={option.code}>{option.name}</option>)}
+                                </select>
+                                {form.errors.country && <p id="pa-register-country-error" className="pa-login-error" role="alert">{form.errors.country}</p>}
+                            </div>
+                            <div className="pa-login-field">
+                                <label htmlFor="pa-register-currency">Devise du portefeuille</label>
+                                <select ref={element => { inputs.current.currency = element; }} id="pa-register-currency" name="currency" required disabled={!country} value={form.data.currency} onChange={event => {
+                                    form.setData('currency', event.target.value);
+                                    form.clearErrors('currency');
+                                }} aria-invalid={!!form.errors.currency} aria-describedby={form.errors.currency ? 'pa-register-currency-error' : 'pa-register-region-summary'}>
+                                    <option value="" disabled>{country ? 'Choisir ma devise' : 'Choisir d’abord un pays'}</option>
+                                    {country?.currencies.map(option => <option key={option.code} value={option.code}>{option.code} — {option.name}</option>)}
+                                </select>
+                                {form.errors.currency && <p id="pa-register-currency-error" className="pa-login-error" role="alert">{form.errors.currency}</p>}
+                            </div>
+                        </div>
+                        <div id="pa-register-region-summary" className="pa-register-region-summary" role="status">
+                            {form.data.currency ? <><strong>Portefeuille personnel en {form.data.currency}</strong><span>{country?.name} · Votre devise sera conservée après l’inscription.</span><span>Les moyens de recharge disponibles dépendent de votre pays. Les participations utilisent un taux de change confirmé.</span></> : <span>La liste des monnaies s’adapte au pays choisi.</span>}
+                        </div>
+                    </fieldset>
                     {fields.map(({ key, label, placeholder, autoComplete, maxLength }) => {
                         const secret = key === 'password' || key === 'password_confirmation';
                         const hint = key === 'password' ? 'pa-register-password-hint' : undefined;
@@ -65,7 +99,6 @@ export default function Register() {
                     <button type="submit" className="pa-login-submit" disabled={form.processing} aria-busy={form.processing}>{form.processing ? 'Création de votre compte…' : 'Créer mon compte'}<span aria-hidden="true">→</span></button>
                 </form>
                 <p className="pa-login-register">Déjà un compte ? <Link href="/login">Connectez-vous ↗</Link></p>
-                <div className="pa-register-demo"><span aria-hidden="true">◎</span><p>Envie de découvrir d’abord ?<br /><Link href="/demo">Explorer la démonstration →</Link></p></div>
             </div>
             <footer className="pa-login-footer"><Link href="/help">Besoin d’aide ?</Link><div><Link href="/privacy">Confidentialité</Link><Link href="/terms">Conditions</Link></div></footer>
         </section>

@@ -3,41 +3,25 @@
 namespace App\Modules\Markets\Http;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Notifications\Notifier;
-use Carbon\Carbon;
+use App\Modules\Markets\MarketWorkflow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class MarketController extends Controller
 {
-    public function store(Request $request)
+    public function store(Request $request, MarketWorkflow $markets)
     {
-        $data = $request->validate([
-            'title' => 'required|string|min:10|max:200', 'description' => 'required|string|min:20|max:5000',
-            'category' => ['required', Rule::in(['Sport', 'Politique', 'Musique', 'Économie', 'Crypto', 'Société'])],
-            'closes_at' => 'required|date|after:now',
-            'yes_odds' => 'required|integer|min:101|max:1000', 'no_odds' => 'required|integer|min:101|max:1000',
-        ]);
-        $data['closes_at'] = Carbon::parse($data['closes_at'])->utc();
-        $id = DB::table('markets')->insertGetId([...$data, 'creator_id' => $request->user()->id, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
+        $id = $markets->submit($request->user()->id, $request->only(['title', 'description', 'category', 'closes_at', 'yes_odds', 'no_odds']));
 
         return redirect("/markets/$id")->with('success', 'Marché envoyé à la modération.');
     }
 
-    public function moderate(Request $request, int $id)
+    public function moderate(Request $request, int $id, MarketWorkflow $markets)
     {
         Gate::authorize('admin');
         $data = $request->validate(['status' => ['required', Rule::in(['open', 'rejected'])]]);
-        DB::transaction(function () use ($id, $data) {
-            $market = DB::table('markets')->where('id', $id)->lockForUpdate()->first();
-            abort_unless($market, 404);
-            abort_unless($market->status === 'pending', 422, 'Ce marché a déjà été modéré.');
-            abort_if($data['status'] === 'open' && now()->gte($market->closes_at), 422, 'Échéance dépassée.');
-            DB::table('markets')->where('id', $id)->update([...$data, 'updated_at' => now()]);
-            Notifier::send($market->creator_id, $data['status'] === 'open' ? 'Votre marché a été publié.' : 'Votre marché a été rejeté.');
-        });
+        $markets->moderate($request->user()->id, $id, $data['status']);
 
         return back()->with('success', 'Modération enregistrée.');
     }

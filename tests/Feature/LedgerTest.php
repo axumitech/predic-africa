@@ -37,14 +37,14 @@ class LedgerTest extends TestCase
         $user = User::factory()->create();
         try {
             DB::transaction(function () use ($user) {
-                (new Ledger)->transfer($user->id, (string) Str::uuid(), 'Dépôt simulé', 100, true);
+                (new Ledger)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 100, true);
                 throw new \RuntimeException('Downstream failure');
             });
         } catch (\RuntimeException $exception) {
             $this->assertSame('Downstream failure', $exception->getMessage());
         }
         foreach (['accounts', 'ledger_transactions', 'ledger_entries', 'platform_notifications'] as $table) {
-            $this->assertDatabaseCount($table, 0);
+            $this->assertDatabaseCount($table, $table === 'accounts' ? 1 : 0);
         }
     }
 
@@ -52,8 +52,9 @@ class LedgerTest extends TestCase
     {
         $user = User::factory()->create();
         DB::table('accounts')->insert(['user_id' => $user->id, 'code' => "user:$user->id", 'balance' => PHP_INT_MAX]);
+        DB::table('payment_wallets')->insert(['user_id' => $user->id, 'currency' => 'XAF', 'balance' => PHP_INT_MAX]);
         try {
-            DB::transaction(fn () => (new Ledger)->transfer($user->id, (string) Str::uuid(), 'Dépôt simulé', 100, true));
+            DB::transaction(fn () => (new Ledger)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 100, true));
             $this->fail('Overflow accepted.');
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('amount', $exception->errors());
@@ -65,9 +66,9 @@ class LedgerTest extends TestCase
     public function test_reconciliation_detects_offsetting_corruption_and_missing_entries(): void
     {
         $user = User::factory()->create();
-        DB::transaction(fn () => (new Ledger)->transfer($user->id, (string) Str::uuid(), 'Dépôt simulé', 100, true));
+        DB::transaction(fn () => (new Ledger)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 100, true));
         DB::table('accounts')->where('user_id', $user->id)->increment('balance', 10);
-        DB::table('accounts')->where('code', 'simulation')->decrement('balance', 10);
+        DB::table('accounts')->where('code', 'treasury')->decrement('balance', 10);
         $this->artisan('ledger:reconcile')->expectsOutput('Comptes incohérents : 2 ; transactions déséquilibrées ou incomplètes : 0.')->assertFailed();
         DB::table('ledger_entries')->delete();
         $this->artisan('ledger:reconcile')->expectsOutput('Comptes incohérents : 2 ; transactions déséquilibrées ou incomplètes : 1.')->assertFailed();

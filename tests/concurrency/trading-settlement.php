@@ -4,6 +4,7 @@
 // by this run. No .env database is migrated, cleared, or dropped.
 use App\Models\User;
 use App\Modules\Ledger\Ledger;
+use App\Modules\Money\PositionQuotes;
 use App\Modules\Settlement\ResolveMarket;
 use App\Modules\Trading\PlacePosition;
 use Illuminate\Contracts\Console\Kernel;
@@ -85,7 +86,7 @@ if (($argv[1] ?? '') === '--worker') {
         echo "READY\n";
         check(trim(fgets(STDIN)) === 'GO', 'Missing barrier.');
         if ($job['operation'] === 'place') {
-            app(PlacePosition::class)->place($job['user'], $job['market'], $job['outcome'], $job['amount'], $job['reference']);
+            app(PlacePosition::class)->place($job['user'], $job['market'], $job['outcome'], $job['amount'], $job['reference'], $job['quote_id'] ?? null);
         } else {
             app(ResolveMarket::class)->resolve($job['market'], $job['result'], 'Source du test concurrent isolé');
         }
@@ -167,10 +168,11 @@ function race(array $jobs, PDO $control, string $table, int $id): array
     }
 }
 
-function fixture(int $funds = 1000): array
+function fixture(int $funds = 1000, string $currency = 'XAF'): array
 {
-    $user = User::factory()->create();
-    DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt simulé', $funds, true));
+    $user = User::factory()->create(['country' => $currency === 'CDF' ? 'COD' : null]);
+    if ($currency !== 'XAF') DB::table('payment_wallets')->insert(['user_id' => $user->id, 'currency' => $currency, 'balance' => 0]);
+    DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', $funds, true));
     $market = DB::table('markets')->insertGetId(['creator_id' => $user->id, 'title' => 'Test de concurrence isolé',
         'description' => 'Marché fictif pour tests.', 'category' => 'Sport', 'status' => 'open',
         'closes_at' => now()->addDay(), 'yes_odds' => 235, 'no_odds' => 170, 'created_at' => now(), 'updated_at' => now()]);
@@ -304,6 +306,31 @@ try {
     }
     check(balance($earlyUser) === 1135 && balance($lateUser) === 1035, 'Bet/settlement balances inconsistent.');
     echo "PASS forced settlement vs other-market bet / no transaction retry\n";
+
+    DB::table('fx_snapshots')->insert(['provider' => 'currencyapi', 'base_currency' => 'XAF',
+        'rates' => json_encode(['XAF' => '1', 'CDF' => '4']), 'as_of' => now(), 'fetched_at' => now()]);
+    [$native, $market] = fixture(100000, 'CDF');
+    $reference = (string) Str::uuid();
+    $quote = app(PositionQuotes::class)->create(User::findOrFail($native), $market, 'yes', '400.01', $reference);
+    $job = ['operation' => 'place', 'user' => $native, 'market' => $market, 'outcome' => 'yes',
+        'amount' => '400.01', 'reference' => $reference, 'quote_id' => $quote->id];
+    check(race([$job, $job], $control, 'markets', $market) === ['ok', 'ok'], 'Concurrent CDF quote consumption failed.');
+    check(balance($native) === 59999 && DB::table('positions')->where('market_id', $market)->count() === 1, 'CDF quote charged twice.');
+    DB::table('markets')->where('id', $market)->update(['closes_at' => now()->subSecond()]);
+    check(race([resolveJob($market, 'yes'), resolveJob($market, 'yes')], $control, 'markets', $market) === ['ok', 'ok'], 'Concurrent CDF settlement failed.');
+    check(balance($native) === 154001, 'CDF winnings not exact or paid twice.');
+    echo "PASS native CDF quote / exact cents / duplicate payout (observed lock waits)\n";
+
+    [$native, $market] = fixture(100000, 'CDF');
+    [$xaf] = fixture();
+    $reference = (string) Str::uuid();
+    $quote = app(PositionQuotes::class)->create(User::findOrFail($native), $market, 'yes', '400.00', $reference);
+    app(PlacePosition::class)->place($native, $market, 'yes', '400.00', $reference, $quote->id);
+    app(PlacePosition::class)->place($xaf, $market, 'yes', 100, (string) Str::uuid());
+    DB::table('markets')->where('id', $market)->update(['closes_at' => now()->subSecond()]);
+    check(race([resolveJob($market, 'yes'), resolveJob($market, 'yes')], $control, 'markets', $market) === ['ok', 'ok'], 'Mixed-currency duplicate settlement failed.');
+    check(balance($native) === 154000 && balance($xaf) === 1135, 'Mixed currencies were netted or paid twice.');
+    echo "PASS mixed CDF/XAF participants / separate treasuries (observed lock waits)\n";
 
     check(Artisan::call('ledger:reconcile') === 0, 'Final ledger reconciliation failed.');
     check(DB::table('accounts')->whereNotNull('user_id')->where('balance', '<', 0)->count() === 0, 'Negative balance.');

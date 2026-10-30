@@ -26,7 +26,7 @@ class PredictionController extends Controller
         $validated = $request->validate(['domain' => ['nullable', 'string', 'max:50', 'regex:/^[a-z_-]+$/']]);
 
         if ($request->hasHeader('X-PredicAfrica-Pipeline')) {
-            return response()->json(['status' => 'unavailable', 'data' => [], 'simulation' => true, 'message' => 'Cette URL est celle de Laravel, pas du service Python.'], 503);
+            return response()->json(['status' => 'unavailable', 'data' => [], 'message' => 'Cette URL est celle de Laravel, pas du service Python.'], 503);
         }
 
         try {
@@ -37,8 +37,8 @@ class PredictionController extends Controller
             }
 
             return response()->json([
-                'status' => 'unavailable', 'data' => [], 'simulation' => true,
-                'message' => 'Le pipeline de démonstration est indisponible. Le catalogue local reste accessible.',
+                'status' => 'unavailable', 'data' => [],
+                'message' => 'Le service de prédictions est indisponible. Le catalogue local reste accessible.',
             ], 503)->header('Retry-After', (string) ($exception instanceof PipelineUnavailable ? $exception->retryAfter : 30));
         }
     }

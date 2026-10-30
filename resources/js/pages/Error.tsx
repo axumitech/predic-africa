@@ -1,6 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import '../../css/app.css';
 import '../features/platform/platform.css';
+import '../features/platform/workspace.css';
 
 export default function ErrorPage({ status }: { status: number }) {
     const { auth } = usePage().props;
@@ -13,5 +14,5 @@ export default function ErrorPage({ status }: { status: number }) {
         503: ['Service temporairement indisponible', 'Veuillez réessayer dans quelques instants.'],
     };
     const [title, message] = messages[status] || ['Une erreur est survenue', 'Veuillez réessayer.'];
-    return <main className="platform p-public"><Head title={`${status} — ${title}`} /><section className="p-document"><small>PREDICAFRICA · {status}</small><h1>{title}</h1><p>{message}</p><div className="p-actions"><Link className="p-button btn btn--primary" href="/">Retour à l’accueil</Link>{auth ? <button className="p-button p-secondary btn btn--outline" onClick={() => router.post('/logout')}>Se déconnecter</button> : <Link className="p-button p-secondary btn btn--outline" href="/login">Connexion</Link>}</div></section></main>;
+    return <main className="platform p-public p-error-page"><Head title={`${status} — ${title}`} /><Link href="/" className="p-error-brand" aria-label="PredicAfrica — Accueil"><img width="1460" height="481" src="/HOR_WG.png" alt="PredicAfrica"/></Link><section className="p-document"><span className="p-error-number">{status}</span><h1>{title}</h1><p>{message}</p><div className="p-actions"><Link className="p-button btn btn--primary" href="/">Retour à l’accueil</Link>{auth ? <button className="p-button p-secondary btn btn--outline" onClick={() => router.post('/logout')}>Se déconnecter</button> : <Link className="p-button p-secondary btn btn--outline" href="/login">Connexion</Link>}</div></section></main>;
 }

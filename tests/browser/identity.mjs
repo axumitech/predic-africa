@@ -11,7 +11,7 @@ import { request } from 'playwright';
 const temp = await mkdtemp(join(tmpdir(), 'predic-e2e-identity-'));
 const database = join(temp, 'database.sqlite');
 await writeFile(database, '');
-const env = { ...process.env, APP_ENV: 'testing', DB_CONNECTION: 'sqlite', DB_DATABASE: database, DB_URL: '', CACHE_STORE: 'array', SESSION_DRIVER: 'database', AI_PIPELINE_ENABLED: 'false' };
+const env = { ...process.env, APP_ENV: 'testing', APP_CONFIG_CACHE: join(temp, 'unused-config.php'), DB_CONNECTION: 'sqlite', DB_DATABASE: database, DB_URL: '', CACHE_STORE: 'array', SESSION_DRIVER: 'database', AI_PIPELINE_ENABLED: 'false' };
 for (const args of [['artisan', 'migrate', '--force'], ['tests/browser/setup.php']]) {
     const result = spawnSync('php', args, { env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -49,7 +49,7 @@ try {
     const old = await client();
     const admin = await client();
     await current.get('/register');
-    assert.equal((await post(current, '/register', { name: 'Identity HTTP', email: 'identity@example.test', password: 'identity-password-123', password_confirmation: 'identity-password-123' })).status(), 302);
+    assert.equal((await post(current, '/register', { name: 'Identity HTTP', email: 'identity@example.test', password: 'identity-password-123', password_confirmation: 'identity-password-123', country: 'GAB', currency: 'XAF' })).status(), 302);
     await login(old, 'identity@example.test', 'identity-password-123');
     await login(admin, 'admin@example.test', 'e2e-password-123');
     let response = await current.get('/profile');

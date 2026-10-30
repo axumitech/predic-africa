@@ -16,7 +16,7 @@ export default function Login() {
     return <main className="pa-login">
         <Head title="Connexion — PredicAfrica" />
         <section className="pa-login-story" aria-label="PredicAfrica">
-            <Link href="/" className="pa-login-brand" aria-label="PredicAfrica — Accueil"><img src="/HOR_WG.png" alt="PredicAfrica" /></Link>
+            <Link href="/" className="pa-login-brand" aria-label="PredicAfrica — Accueil"><img width="1460" height="481" src="/HOR_WG.png" alt="PredicAfrica" /></Link>
             <div className="pa-login-story-body">
                 <span className="pa-login-eyebrow"><span /> LA BOURSE DES CONVICTIONS</span>
                 <h2>L’Afrique bouge.<br />Prenez <em>position.</em></h2>
@@ -26,10 +26,10 @@ export default function Login() {
                     <div className="pa-login-market-heading"><span>VOTRE PROCHAINE CONVICTION</span><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m4 17 6-6 4 3 6-9m-6 0h6v6" /></svg></div>
                     <p>Une question.<br /><strong>À vous de choisir.</strong></p>
                     <svg className="pa-login-chart" viewBox="0 0 400 92" fill="none" preserveAspectRatio="none"><path d="M0 76H400M0 42H400M0 8H400" stroke="currentColor" strokeOpacity=".12" strokeDasharray="3 6"/><path d="M0 75 35 70 64 74 100 55 132 61 165 36 193 44 225 29 255 38 285 18 315 25 350 8 380 16 400 4" stroke="#f0b40b" strokeWidth="2.5" strokeLinejoin="round"/><circle cx="350" cy="8" r="4" fill="#f0b40b"/></svg>
-                    <div className="pa-login-market-footer"><span>OUI <b>↗</b></span><span>NON <b>↘</b></span><small>Illustration · Démonstration</small></div>
+                    <div className="pa-login-market-footer"><span>OUI <b>↗</b></span><span>NON <b>↘</b></span><small>Cotes fixes · Oui / Non</small></div>
                 </div>
             </div>
-            <p className="pa-login-story-note"><svg width="16" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>Des crédits fictifs pour tester vos intuitions.</p>
+            <p className="pa-login-story-note"><svg width="16" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>Votre espace personnel pour suivre vos positions et vos opérations.</p>
         </section>
 
         <section className="pa-login-access" aria-labelledby="pa-login-title">
@@ -46,7 +46,7 @@ export default function Login() {
                 }}>
                     <div className="pa-login-field">
                         <label htmlFor="pa-login-email">Adresse e-mail</label>
-                        <input ref={email} id="pa-login-email" name="email" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="vous@exemple.com" required maxLength={255} value={form.data.email} onChange={e => form.setData('email', e.target.value)} aria-invalid={!!form.errors.email} aria-describedby={form.errors.email ? 'pa-login-email-error' : undefined}/>
+                        <input ref={email} id="pa-login-email" name="email" inputMode="email" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="vous@exemple.com" required maxLength={255} value={form.data.email} onChange={e => form.setData('email', e.target.value)} aria-invalid={!!form.errors.email} aria-describedby={form.errors.email ? 'pa-login-email-error' : undefined}/>
                         {form.errors.email && <p className="pa-login-error" id="pa-login-email-error" role="alert">{form.errors.email}</p>}
                     </div>
                     <div className="pa-login-field">
@@ -58,7 +58,6 @@ export default function Login() {
                 </form>
                 <p className="pa-login-register"><Link href="/register"><span>Pas encore de compte ?</span> Inscrivez-vous <span aria-hidden="true">↗</span></Link></p>
                 <div className="pa-login-divider"><span>ENVIE DE DÉCOUVRIR ?</span></div>
-                <Link className="pa-login-demo" href="/demo"><span className="pa-login-demo-icon" aria-hidden="true">▶</span><span><strong>Explorer la démonstration</strong><small>Découvrez la plateforme sans créer de compte.</small></span><Arrow /></Link>
             </div>
             <footer className="pa-login-footer"><Link href="/help">Besoin d’aide ?</Link><div><Link href="/privacy">Confidentialité</Link><Link href="/terms">Conditions</Link></div></footer>
         </section>

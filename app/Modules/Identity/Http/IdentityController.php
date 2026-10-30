@@ -4,6 +4,7 @@ namespace App\Modules\Identity\Http;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\Identity\RegistrationRegions;
 use App\Modules\Identity\SessionAccess;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -19,16 +20,29 @@ use Inertia\Inertia;
 
 class IdentityController extends Controller
 {
+    public function registration(RegistrationRegions $regions)
+    {
+        return Inertia::render('Register', ['countries' => $regions->options()]);
+    }
+
     public function register(Request $request)
     {
         $data = $request->validate([
             'name' => 'required|string|max:100', 'email' => 'required|email|max:255|unique:users',
             'password' => ['required', 'confirmed', Password::min(10)],
+            'country' => ['bail', 'required', 'string', Rule::in(array_keys(config('regions.countries')))],
+            'currency' => ['bail', 'required', 'string', Rule::in(app(RegistrationRegions::class)->currenciesFor($request->input('country')))],
+        ], [
+            'country.required' => 'Choisissez votre pays.',
+            'country.in' => 'Ce pays n’est pas disponible à l’inscription.',
+            'currency.required' => 'Choisissez la devise de votre portefeuille.',
+            'currency.in' => 'Cette devise n’est pas disponible pour le pays choisi.',
         ]);
         try {
             $user = DB::transaction(function () use ($data) {
-                $user = User::create($data);
-                DB::table('accounts')->insert(['user_id' => $user->id, 'code' => "user:$user->id", 'balance' => 0]);
+                $user = User::create(\Illuminate\Support\Arr::except($data, ['currency']));
+                DB::table('accounts')->insert(['user_id' => $user->id, 'code' => "user:$user->id", 'currency' => $data['currency'], 'balance' => 0]);
+                DB::table('payment_wallets')->insert(['user_id' => $user->id, 'currency' => $data['currency'], 'balance' => 0]);
 
                 return $user->refresh();
             });

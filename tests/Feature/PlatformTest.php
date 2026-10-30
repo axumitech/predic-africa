@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Modules\Ledger\Ledger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -38,7 +39,9 @@ class PlatformTest extends TestCase
 
     private function deposit(User $user, int $amount = 1000, ?string $reference = null)
     {
-        return $this->actingAs($user)->post('/wallet', ['kind' => 'deposit', 'amount' => $amount, 'reference' => $reference ?? (string) Str::uuid()]);
+        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, $reference ?? (string) Str::uuid(), 'Dépôt NDSGPay', $amount, true));
+
+        return $this->actingAs($user)->get('/wallet');
     }
 
     private function bet(User $user, int $market, int $amount = 100, ?string $reference = null)
@@ -74,7 +77,7 @@ class PlatformTest extends TestCase
 
     public function test_registration_authenticates_and_never_accepts_admin_role(): void
     {
-        $this->post('/register', ['name' => 'Trader', 'email' => 'trader@example.test', 'password' => 'test-password-123', 'password_confirmation' => 'test-password-123', 'role' => 'admin'])->assertRedirect('/dashboard');
+        $this->post('/register', ['name' => 'Trader', 'email' => 'trader@example.test', 'password' => 'test-password-123', 'password_confirmation' => 'test-password-123', 'role' => 'admin', 'country' => 'GAB', 'currency' => 'XAF'])->assertRedirect('/dashboard');
         $user = User::first();
         $this->assertAuthenticatedAs($user);
         $this->assertSame('trader', $user->role);
@@ -100,7 +103,7 @@ class PlatformTest extends TestCase
     public function test_all_pages_render_with_persistent_data(): void
     {
         $user = $this->user(true);
-        foreach (['/', '/login', '/register', '/help', '/terms', '/privacy', '/data', '/demo'] as $path) {
+        foreach (['/', '/login', '/register', '/help', '/terms', '/privacy', '/data'] as $path) {
             $this->get($path)->assertOk();
         }
         $this->actingAs($user);
@@ -146,37 +149,13 @@ class PlatformTest extends TestCase
         }
     }
 
-    public function test_deposits_withdrawals_and_idempotency_keep_ledger_balanced(): void
+    public function test_no_browser_endpoint_can_mint_wallet_funds(): void
     {
         $user = $this->user();
-        $reference = (string) Str::uuid();
-        $this->deposit($user, 1000, $reference)->assertSessionHasNoErrors();
-        $this->deposit($user, 1000, $reference)->assertSessionHasNoErrors();
-        $this->assertSame(1000, $this->balance($user));
-        $this->deposit($user, 1100, $reference)->assertSessionHasErrors('reference');
-        $this->post('/wallet', ['kind' => 'withdraw', 'amount' => 1500, 'reference' => (string) Str::uuid()])->assertSessionHasErrors('amount');
-        $this->post('/wallet', ['kind' => 'withdraw', 'amount' => 1000, 'reference' => (string) Str::uuid()])->assertSessionHasNoErrors();
+        $this->actingAs($user)->postJson('/wallet', ['kind' => 'deposit', 'amount' => 1000, 'reference' => (string) Str::uuid()])->assertStatus(405);
         $this->assertSame(0, $this->balance($user));
-        $this->assertSame(0, (int) DB::table('ledger_entries')->sum('amount'));
-        $this->assertSame(0, (int) DB::table('accounts')->sum('balance'));
-        $this->assertDatabaseCount('ledger_transactions', 2);
-        foreach (DB::table('ledger_transactions')->get() as $tx) {
-            $this->assertSame(0, (int) DB::table('ledger_entries')->where('transaction_id', $tx->id)->sum('amount'));
-        }
-    }
-
-    public function test_invalid_financial_inputs_and_cross_user_reference_reuse_are_rejected(): void
-    {
-        $user = $this->user();
-        $reference = (string) Str::uuid();
-        $this->deposit($user, 1000, $reference);
-        foreach ([-100, 0, 1.5, 1000001] as $amount) {
-            $this->post('/wallet', ['kind' => 'deposit', 'amount' => $amount, 'reference' => (string) Str::uuid()])->assertSessionHasErrors('amount');
-        }
-        $other = $this->user();
-        $this->deposit($other, 1000, $reference)->assertSessionHasErrors('reference');
-        $this->assertSame(0, $this->balance($other));
-        $this->assertSame(1000, $this->balance($user));
+        $this->assertDatabaseCount('ledger_transactions', 0);
+        $this->get('/demo')->assertNotFound();
     }
 
     public function test_position_uses_server_odds_and_duplicate_requests_do_not_charge_twice(): void
@@ -274,16 +253,17 @@ class PlatformTest extends TestCase
         $this->assertSame($user->name, $user->fresh()->name);
         $this->actingAs($admin)->post('/admin/users/'.$user->id, ['suspended' => true])->assertSessionHasNoErrors();
         $this->actingAs($user->fresh())->get('/markets')->assertForbidden();
-        $this->deposit($user->fresh())->assertForbidden();
+        $this->actingAs($user->fresh())->post('/wallet/ndsgpay', [])->assertForbidden();
         $this->actingAs($admin)->postJson('/admin/users/'.$admin->id, ['suspended' => true])->assertStatus(422);
     }
 
     public function test_pipeline_import_is_admin_only_validated_and_idempotent(): void
     {
+        config(['predictions.enabled' => true]);
         $user = $this->user();
         $admin = $this->user(true);
         $this->actingAs($user)->post('/admin/pipeline/import', ['id' => 7])->assertForbidden();
-        Http::fake(['*/api/markets' => Http::response(['data' => [[
+        Http::fake(['*/api/markets' => Http::response(['simulation' => false, 'data' => [[
             'id' => 7, 'title' => 'Un marché généré pour les tests ?', 'description' => 'Une description assez détaillée pour la modération.',
             'category' => 'crypto', 'options' => ['Oui', 'Non'], 'odds' => [2.35, 1.7], 'expiry' => now()->addDay()->toISOString(),
         ]]])]);

@@ -3,7 +3,7 @@
     --pa-surface: #f6f8fc; --pa-white: #fff; --pa-gold: #f5b700; --pa-gold-light: #ffd45a;
     --pa-info: #3b82f6; --pa-yes: #16a36a; --pa-no: #e25555; --pa-warning: #f59e0b;
     --pa-text: #0f172a; --pa-muted: #64748b; --pa-border: #dde4ee;
-    --pa-focus: #8f6900; --pa-radius: 12px; --pa-shadow: 0 4px 20px #07142606;
+    --pa-duration: 160ms; --pa-focus: #8f6900; --pa-radius: 12px; --pa-shadow: 0 4px 20px #07142606;
     --pa-space-1: 4px; --pa-space-2: 8px; --pa-space-3: 12px; --pa-space-4: 16px; --pa-space-6: 24px; --pa-space-8: 32px; --pa-space-12: 48px;
     --pa-font: Inter, system-ui, sans-serif; --pa-title: Poppins, Inter, sans-serif;
     --pa-xs: .75rem; --pa-sm: .875rem; --pa-base: 1rem; --pa-lg: 1.25rem; --pa-xl: 1.5rem; --pa-2xl: 2rem;

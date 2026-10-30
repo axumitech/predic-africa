@@ -1,70 +1,39 @@
-# Architecture implémentée
+# Architecture officielle
 
-## Périmètre
+Laravel 13, React/Inertia, authentification par session et rôles trader/admin. La landing officielle reprend la structure et les styles de l’ancienne landing : header, hero, cartes, étapes, FAQ, calcul de retour et support. Elle utilise exclusivement des liens réels, le catalogue publié et des statistiques SQL. Aucun moteur historique, compte rapide, chatbot factice, téléphone USSD ou stockage local de solde n’est chargé.
 
-Monolithe Laravel, pages Inertia/React, SQLite local. Les domaines applicatifs sont persistants, à cote fixe, en crédits de démonstration. Le prototype autonome et ses anciens composants sont conservés sur `/demo`.
+## Fonds et journal
 
-| Domaine | Implémentation |
-| --- | --- |
-| Identity | `IdentityController` : inscription/session/profil/suspension ; `SessionAccess` : liaison de version et révocation locale ; `ActiveAccount` dans le groupe web avant partage Inertia |
-| Markets | `app/Modules/Markets` : propositions, validation, publication/rejet ; critères et cotes immuables après soumission |
-| Trading | `app/Modules/Trading/PlacePosition.php` : opération transactionnelle de mise ; `FixedOdds` : bornes et arrondi entier ; contrôleur HTTP : validation de requête |
-| Ledger | `app/Modules/Ledger/Ledger.php` : montants entiers, paires d’écritures équilibrées et solde matérialisé |
-| Payments | `app/Modules/Payments` : dépôts/retraits de crédits fictifs, sans adaptateur opérateur réel |
-| Settlement | `app/Modules/Settlement/ResolveMarket.php` : résolution, gains et remboursements atomiques ; contrôleur HTTP : rôle admin et validation |
-| Support | `app/Modules/Support` : tickets et messages avec contrôle du propriétaire ou du rôle admin |
-| Notifications | `app/Modules/Notifications` : notifications persistées dans les transactions métier ; lecture privée |
-| Predictions | `app/Modules/Predictions` : passerelle Python, cache, délais, génération admin et import contrôlé |
+Le portefeuille officiel conserve la devise choisie à l’inscription (XAF, XOF, CDF, KES, RWF, UGX, ZMW ou SLE). `payment_wallets.balance` et le compte utilisateur de `accounts` sont mis à jour ensemble, dans la même transaction, via `Ledger`. Chaque mouvement comporte deux écritures de somme nulle, la contrepartie est `treasury` pour XAF et `treasury:<devise>` pour les autres monnaies. Les fonds disponibles sont vérifiés avant débit ; ils restent engagés dans les positions jusqu’à résolution. Les gains et remboursements empruntent le même journal. Les montants sont des entiers en unités mineures ; les écritures portent une devise. Voir [le moteur de change](fx.md) pour la précision, les confirmations expirables et les taux datés.
 
-## Données et invariants
+Les confirmations NDSGPay créditent ce journal et le portefeuille atomiquement. `payment_movements` relie propriétaire, paiement éventuel et transaction comptable : les mises/gains possèdent une transaction comptable mais pas de paiement prestataire. Les anciens mouvements NDSGPay gardent leurs montants et identifiants ; une écriture d’ouverture reprend seulement leur solde réellement comptabilisé, sans recréditer les fonds.
 
-Les migrations ajoutent `accounts`, `ledger_transactions`, `ledger_entries`, `markets`, `positions`, `support_tickets`, `support_messages` et `platform_notifications`. Les références d’opération et les sources d’importation sont uniques.
+`Ledger` verrouille l’utilisateur, les comptes par ID puis le portefeuille. Le trading verrouille le marché avant l’utilisateur ; le règlement verrouille tous les participants avant la première écriture. Les références, empreintes et contraintes SQL empêchent les doubles effets. `ledger:reconcile` contrôle les comptes et les paires d’écritures ; `payments:audit` contrôle le portefeuille contre tous ses mouvements, paiements et trading compris.
 
-Chaque opération comptable écrit une transaction, deux écritures de somme nulle et met à jour les deux soldes. Le compte `simulation` constitue la contrepartie. Sa capacité négative sert seulement à la création et à la destruction de crédits fictifs. Aucun argent client réel ne doit être stocké dans ce moteur.
+L’ancien POST `/wallet` est supprimé. Aucun formulaire navigateur ne peut créer arbitrairement des fonds. Les tests injectent leurs fixtures uniquement via un script isolé qui refuse les bases applicatives.
 
-Les chemins financiers sont enveloppés dans `DB::transaction(..., 3)`. Les mises et résolutions verrouillent d’abord leur marché. La résolution verrouille tous ses participants par identifiant avant tout transfert ; les comptes sont ensuite verrouillés par Ledger. Le verrou de marché sérialise les écritures de positions de ce marché : la lecture des positions ne prend pas de verrou de plage, qui bloquerait des insertions sur d’autres marchés sous InnoDB. Les montants et paiements sont recalculés côté serveur. Les mises stockent leur cote et leur retour potentiel ; les changements de données côté navigateur ne les modifient pas.
+## Paiements et exploitation
 
-Une référence d’ordre est associée à une empreinte du compte, du type, du montant et du contexte. Un appel identique retrouve l’opération ; une référence réutilisée avec un contenu différent est refusée. La résolution verrouille le marché et son état final empêche les doubles versements. Les tests SQLite couvrent les invariants séquentiels et les rollbacks. Huit scénarios concurrents ont été vérifiés avec des processus PHP distincts sur MySQL 9.6/InnoDB en REPEATABLE READ, dont un entrelacement imposé entre mise et résolution sur des marchés différents. Voir `docs/audit-2026-10-19.md` et `tests/concurrency/README.md`. Le moteur de production reste à confirmer ; PostgreSQL et la montée en charge ne sont pas validés.
+Voir [NDSGPay](ndsgpay.md) pour la signature, l’inbox durable, les confirmations GET, les quotas SQL, la reprise et les incidents. Les paiements réels nécessitent configuration explicite et activation ; les payouts restent fermés. La suppression de l’interface de démonstration n’active pas un compte prestataire.
 
-## Interface
+## Migration de l’existant
 
-- `resources/js/pages/Platform.tsx` : écrans du nouvel espace et formulaires par parcours.
-- `resources/js/features/platform/Layout.tsx` : navigation, compte, portefeuille et pied de page.
-- `resources/js/features/platform/ui.tsx` : formulaires Inertia, erreurs, tableaux de marchés et pagination.
-- `resources/js/features/platform/platform.css` : adaptateurs de mise en page, utilisant les couleurs et composants de la feuille de style d’origine.
-- `resources/js/pages/Error.tsx` : pages 403, 404, 419, 429 et 503.
-- `app/Http/Controllers/PlatformController.php` : données paginées des pages, filtrées selon les droits.
+La migration `2026_10_29_000003_retire_demo_and_unify_wallet` conserve les anciens comptes, écritures, transactions et positions dans `retired_records` avant leur retrait des tables actives. Les soldes de crédits historiques ne sont jamais convertis en XAF. Les seuls soldes repris viennent des portefeuilles NDSGPay. Les marchés préremplis identifiables sont archivés ; les autres marchés ouverts retournent à la modération pour revue avant mise monétaire. Les comptes utilisateurs et les conversations de support restent conservés.
 
-Les pages sont résolues dynamiquement par nom. Les styles d’origine sont partagés par toutes les pages. Le moteur historique est limité à l’accueil et à `/demo` ; les pages métier utilisent React/Inertia. Les tableaux sont paginés ; les mots de passe ne sont jamais transmis dans les propriétés Inertia. Les traitements métier refusés retournent des erreurs dans le formulaire.
+Effectuer cette migration en maintenance, après sauvegarde. Son rollback automatique est interdit : restaurer mécaniquement les anciens crédits sur des fonds réels serait dangereux. Une récupération exige une procédure revue à partir des sauvegardes et archives. Les fichiers retirés sont conservés sous `legacy/`, hors build et hors routes. Les modifications locales antérieures de ces sources y sont préservées.
 
-## Pipeline et importation
+## Prédictions
 
-Les API historiques `/api/predictions` et `/api/markets` restent des lectures de démonstration. `/admin/pipeline/generate` est authentifié, réservé à l’administrateur et limité en fréquence. Les imports sont relus depuis Python côté serveur ; un client ne peut pas substituer des cotes dans sa requête. Ils doivent être binaires, valides et non expirés. La publication n’est jamais automatique.
+L’ancien service Python produisait des scores aléatoires. Il est retiré de `services/` et conservé dans `legacy/retired-ai/`. Le connecteur Laravel reste disponible pour un futur service réel, désactivé par défaut ; il exige explicitement `simulation=false`, y compris pour la génération et les réponses cachées. Les sources déclarées synthétiques ou non qualifiées sont refusées. Les propositions importées restent soumises aux validations et à la modération ; aucune donnée fictive n’est publiée automatiquement.
 
-Le modèle Python reste simulé. Les routes locales n’exposent ni lecture arbitraire des logs serveur ni commandes système ni fausse action de réentraînement.
+## Tests
 
-## Éléments restant hors périmètre de cette démonstration
+PHPUnit force une base SQLite en mémoire et un chemin de cache distinct. `Tests\TestCase` refuse de migrer une base applicative en cas de configuration inattendue. Les tests navigateur possèdent leur propre fichier SQLite et aucun appel NDSGPay réel. Les tests MySQL/InnoDB utilisent une base éphémère et observent les attentes de verrous ; SQLite ne prouve pas le comportement concurrent en production.
 
-Paiements réels, devises réelles, matching P2P, revente, SMS/USSD opérateur, traduction du nouvel espace, mails de récupération, outbox et diffusion temps réel, Redis/Horizon/Reverb, entraînement IA réel, tests de charge et déploiement production. Le prototype conserve ses fonctions FR/EN, régions et simulateur USSD séparément.
+Les conditions commerciales, les capacités opérateurs et les engagements d’exploitation doivent être validés avant ouverture publique. Les textes ne revendiquent ni retraits disponibles ni support de devises/opérateurs non confirmés.
 
-L’architecture cible initiale dans `docs/original` reste une référence produit ; elle ne doit pas être interprétée comme une liste de garanties livrées.
+## Vérifications de la bascule
 
-## Contrats Trading / Settlement (lot du 19 octobre 2026)
+Le 29 octobre 2026 : 144 tests PHPUnit réussis (1 095 assertions), TypeScript et build Vite réussis, parcours navigateur validés de 320 à 1 920 px. Les captures de la landing ont été vérifiées sur mobile et ordinateur. Le test de migration isolé confirme que 9 000 anciens crédits sont archivés tandis que 1 000 XAF existants sont conservés, sans conversion ni double crédit. MySQL 9.6.0 / REPEATABLE READ : quatre courses paiements et huit scénarios trading/règlement réussis, journaux rapprochés. Aucun appel de paiement réel ni déploiement.
 
-`PlacePosition::place(userId, marketId, outcome, amount, reference)` valide les bornes et l’issue, relit la suspension sous verrou utilisateur, puis demande au Ledger le débit idempotent. Le rejeu vérifie la position liée ; un débit orphelin ne recrée jamais une position. `FixedOdds::payout` impose les bornes existantes et l’arrondi inférieur sans flottants.
-
-`ResolveMarket::resolve(marketId, result, source)` est une opération interne appelée après autorisation admin par le contrôleur. Elle vérifie les transitions, l’échéance (sauf annulation), les cotes verrouillées, le retour potentiel et la correspondance au débit initial. Un état incohérent est refusé sans réparation implicite. Résultat, positions, journal, soldes et notifications restent dans une seule transaction ; une erreur annule tout le règlement. Un rejeu de même résultat conserve la source initiale ; une correction de résultat exige un futur parcours explicite de compensation.
-
-Aucune écriture de position ne doit contourner le verrou de marché ; cela conditionne la sécurité de la lecture sans verrou de plage. Les trois reprises transactionnelles existantes sont conservées pour les conflits SQL. L’ensemble des positions est encore chargé en mémoire et la contrepartie simulation reste partagée : aucune capacité de charge garantie. Aucune migration ni intégration de paiement réelle n’est introduite.
-
-## Identity et autorisations (lot 3 du 19 octobre 2026)
-
-Les rôles HTTP admis restent `trader` et `admin`. Leur attribution n’est acceptée ni à l’inscription ni dans le profil ; la commande serveur `platform:admin` reste le mécanisme existant de promotion. Les Gates Laravel `admin`, `view-market` et `access-ticket`, définies dans AppServiceProvider, centralisent les règles. Aucun bypass global des propriétaires pour les administrateurs : leurs positions, transactions et notifications restent personnelles ; leur accès étendu au support et à la modération est explicite.
-
-`ActiveAccount` relit l’utilisateur depuis la base avant les pages publiques et privées du groupe web, puis vérifie suspension, rôle et version d’accès avant les propriétés Inertia. `users.auth_version` est incrémenté dans la transaction de changement de mot de passe ou de suspension effective. La session stocke la version de sa dernière authentification. Une ancienne session ne redevient pas valide après réactivation, quel que soit le stockage de session. Les sessions préexistantes sans version ne sont admises que pour un utilisateur de version zéro. Une révocation vide la session locale et renouvelle son identifiant et le jeton CSRF ; le contrôle est effectué à la prochaine requête, pas par notification distante.
-
-Le profil exige le mot de passe actuel vérifié sur la ligne verrouillée ; le changement de mot de passe renouvelle aussi le remember_token et conserve uniquement la session courante avec sa nouvelle version. Le changement d’e-mail efface email_verified_at sans activer de vérification par e-mail. La suspension est idempotente ; acteur et cible sont verrouillés par identifiant puis les droits de l’acteur relus, et l’auto-suspension est refusée. Les dépôts/retraits relisent également la suspension sous verrou utilisateur.
-
-Les tentatives de connexion sont limitées à six par IP et dix par identifiant d’e-mail normalisé pour le compteur, par minute. L’e-mail du compte n’est pas réécrit ; la clé du compteur utilise son hash. La génération pipeline a son propre préfixe de quota, indépendant des mutations courantes. Les réponses Inertia et erreurs sont marquées `private, no-store`. La déconnexion et les révocations signalent `clearHistory` à Inertia ; ce signal ne constitue pas une garantie de purge de toutes les données déjà reçues par le navigateur.
-
-Déploiement : appliquer la migration additive `2026_10_19_000001_add_auth_version_to_users.php` avant le code utilisant la colonne. Elle conserve les comptes et affecte zéro par défaut. Aucun e-mail, solde ou rôle existant n’est migré. Pour un retour arrière, restaurer d’abord l’ancien code ; conserver la colonne évite de perdre l’historique de révocation. La suppression optionnelle de cette colonne exige de purger les sessions avant une éventuelle réintroduction du versionnement. Voir le suivi d’audit pour les limites, notamment les requêtes déjà en cours et les tests de concurrence non réalisés dans ce lot.
+Incident local pendant le premier lancement de PHPUnit : un cache de configuration préexistant a dirigé RefreshDatabase vers `database/database.sqlite`, qui a été réinitialisée. Les comptes/paiements locaux antérieurs ne sont plus présents et nécessitent une sauvegarde pour récupération ; leur restauration n’a pas pu être réalisée. L’isolation PHPunit, le chemin de cache distinct et le refus explicite de toute base autre que SQLite en mémoire ont été ajoutés après constat. Cet incident est distinct du test de migration contrôlé et de son archivage.
