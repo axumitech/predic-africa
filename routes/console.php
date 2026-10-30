@@ -86,7 +86,7 @@ Artisan::command('payments:health', function () {
 
 Artisan::command('payments:audit', function (Payments $payments) {
     $mismatches = 0;
-    DB::table('payment_wallets as w')->leftJoin('payment_movements as m', 'm.user_id', '=', 'w.user_id')
+    DB::table('payment_wallets as w')->leftJoin('payment_movements as m', fn ($join) => $join->on('m.user_id', '=', 'w.user_id')->on('m.currency', '=', 'w.currency'))
         ->select('w.id', 'w.balance')->selectRaw('COALESCE(SUM(m.amount), 0) as journal_balance')
         ->groupBy('w.id', 'w.balance')->orderBy('w.id')->chunk(100, function ($rows) use ($payments, &$mismatches) {
             foreach ($rows as $row) {

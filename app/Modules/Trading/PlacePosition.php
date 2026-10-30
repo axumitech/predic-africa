@@ -14,19 +14,22 @@ class PlacePosition
 {
     public function __construct(private Ledger $ledger) {}
 
-    public function place(int $userId, int $id, string $outcome, int|string $amount, string $reference, ?string $quoteId = null): void
+    public function place(int $userId, int $id, string $outcome, int|string $amount, string $reference, ?string $quoteId = null, ?string $expectedCurrency = null): void
     {
         Validator::make(compact('outcome', 'amount', 'reference'), [
             'outcome' => ['required', Rule::in(['yes', 'no'])],
             'amount' => 'required', 'reference' => 'required|uuid',
         ])->validate();
-        DB::transaction(function () use ($userId, $id, $reference, $amount, $outcome, $quoteId) {
+        DB::transaction(function () use ($userId, $id, $reference, $amount, $outcome, $quoteId, $expectedCurrency) {
             // Market first, then user, then accounts: same order as settlement.
             $market = DB::table('markets')->where('id', $id)->lockForUpdate()->first();
             abort_unless($market, 404);
             $user = DB::table('users')->where('id', $userId)->lockForUpdate()->firstOrFail();
             abort_if($user->suspended, 403, 'Compte suspendu.');
-            $currency = DB::table('payment_wallets')->where('user_id', $userId)->value('currency') ?? 'XAF';
+            $currency = \App\Modules\Money\Wallets::currency($userId);
+            if ($expectedCurrency !== null && $expectedCurrency !== $currency) {
+                throw ValidationException::withMessages(['amount' => 'Le portefeuille actif a changé. Actualisez la page.']);
+            }
             $walletStake = Money::minor($amount, $currency);
             $prior = DB::table('ledger_transactions')->where('reference', $reference)->first();
             if ($prior) {

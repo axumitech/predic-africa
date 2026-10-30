@@ -31,6 +31,14 @@ Il faut vérifier la source avant de modifier la liste.
 ## Comportement
 
 - Pays et devise sont obligatoires, sans choix initial implicite.
+- Le téléphone est obligatoire pour les nouvelles inscriptions. Le même choix
+  de pays pilote l'indicatif affiché ; changer de pays efface le téléphone saisi.
+  Le serveur accepte le numéro national ou international, vérifie son indicatif
+  et sa longueur, puis stocke `users.phone` au format E.164 avec `+`.
+  Les zéros significatifs du Bénin, du Congo et de Côte d'Ivoire sont conservés ;
+  le préfixe national zéro est retiré seulement pour les pays qui le prévoient.
+  Il s'agit d'une validation de format, sans envoi de SMS ni preuve de propriété.
+  Le téléphone est masqué dans la sérialisation générale du modèle utilisateur.
 - Le pays filtre les devises proposées. Un changement de pays efface la devise
   précédente, même si les deux pays partagent une monnaie.
 - Le serveur refuse les valeurs inconnues, les paramètres mal formés et les couples
@@ -43,14 +51,20 @@ Il faut vérifier la source avant de modifier la liste.
   du profil ne permet pas de les changer ni de convertir un solde.
 - Les comptes existants gardent leur portefeuille et leurs fonds. La migration
   ajoute seulement un pays nullable : aucune résidence n’est déduite des soldes.
+  La migration du 30 octobre ajoute un téléphone nullable pour ces anciens
+  comptes ; aucun numéro fictif ne leur est attribué.
 
 ## Limite monétaire actuelle
 
 L’inscription dans une devise du catalogue **n’active pas ses paiements**.
 Les capacités marchandes restent définies dans `NDSGPAY_CAPABILITIES`.
-Les opérateurs visibles sont filtrés par pays et devise du compte, et le service
-revérifie cette concordance avant toute création de paiement chez NDSGPay.
-Les comptes historiques sans pays conservent leur comportement XAF.
+Les opérateurs visibles sont filtrés par la devise du portefeuille sélectionné,
+indépendamment du pays d’inscription. Les libellés indiquent le pays, l’opérateur
+et son indicatif téléphonique. Un compte gabonais avec un portefeuille CDF peut
+ainsi déposer via un opérateur activé en RDC. Le serveur vérifie toujours la
+devise du portefeuille, l’activation de l’opérateur et le format international du
+numéro selon le pays de cet opérateur. Le pays du paiement vient de l’opérateur ;
+le pays de résidence du compte reste inchangé.
 
 Le journal actif est désormais séparé par devise. Les dépôts natifs et les
 participations hors XAF sont pris en charge ; ces dernières nécessitent un taux
@@ -71,3 +85,8 @@ RDC/CDF jusqu’au profil et au portefeuille, puis le parcours XAF existant.
 Les tests utilisent uniquement des bases temporaires ; les tests PHP interdisent
 les appels prestataire non simulés. Les captures de l’inscription se trouvent dans
 `test-results/register-region-{390,1440}.png`.
+
+`node tests/browser/registration.mjs` vérifie aussi le préfixe dynamique, le
+téléphone obligatoire, la remise à zéro lors d'un changement de pays, les erreurs
+serveur et une inscription CDF avec téléphone national. Captures mobile et bureau :
+`/private/tmp/predicafrica-registration-phone-{390,1440}.png`.

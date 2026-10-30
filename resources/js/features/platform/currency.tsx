@@ -57,7 +57,7 @@ export function ReferenceAmount({ value, baseOnly = false }: { value: Minor; bas
     const { fx, fresh } = useCurrency();
     if (baseOnly || !fx || fx.currency === 'XAF') return <>{formatMinor(value, 'XAF')} XAF</>;
     const converted = fresh ? convertReference(value, fx) : null;
-    if (converted === null) return <span title="Le taux de conversion est indisponible.">{formatMinor(value, 'XAF')} XAF <small>· conversion indisponible</small></span>;
+    if (converted === null) return <span title="Le taux de conversion est indisponible.">— {fx.currency} <small>· conversion indisponible</small></span>;
     return <span title={`Équivalent indicatif de ${formatMinor(value, 'XAF')} XAF · taux du ${new Date(fx.as_of!).toLocaleString('fr-FR')}`}>≈ {formatMinor(converted, fx.currency)} {fx.currency}</span>;
 }
 export function FxNotice() {

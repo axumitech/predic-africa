@@ -61,10 +61,12 @@ class Payments
                 if (DB::table('payments')->where('user_id', $userId)->where('kind', 'deposit')->whereNotIn('local_state', self::FINAL)->exists()) {
                     throw ValidationException::withMessages(['reference' => 'Un dépôt attend déjà sa confirmation. Ne relancez pas le paiement.']);
                 }
-                DB::table('payment_wallets')->insertOrIgnore(['user_id' => $userId, 'currency' => 'XAF', 'balance' => 0]);
-                $wallet = DB::table('payment_wallets')->where('user_id', $userId)->lockForUpdate()->firstOrFail();
-                if ($wallet->currency !== $data['currency'] || ($user->country !== null && $user->country !== $data['country'])) {
-                    throw ValidationException::withMessages(['correspondent' => 'Cet opérateur ne correspond pas au pays et à la devise de votre portefeuille.']);
+                if (! DB::table('payment_wallets')->where('user_id', $userId)->exists()) {
+                    DB::table('payment_wallets')->insert(['user_id' => $userId, 'currency' => 'XAF', 'balance' => 0]);
+                }
+                $wallet = DB::table('payment_wallets')->where('user_id', $userId)->where('currency', \App\Modules\Money\Wallets::currency($userId))->lockForUpdate()->firstOrFail();
+                if ($wallet->currency !== $data['currency']) {
+                    throw ValidationException::withMessages(['correspondent' => 'Cet opérateur ne correspond pas à la devise du portefeuille sélectionné.']);
                 }
                 $record = $data;
                 unset($record['msisdn']);
@@ -258,7 +260,7 @@ class Payments
 
     private function move(object $payment, string $effect, int $amount): void
     {
-        $wallet = DB::table('payment_wallets')->where('user_id', $payment->user_id)->firstOrFail();
+        $wallet = DB::table('payment_wallets')->where('user_id', $payment->user_id)->where('currency', $payment->currency)->firstOrFail();
         if ($wallet->currency !== $payment->currency || $amount <= 0 || $wallet->balance > PHP_INT_MAX - $amount) {
             throw new \LogicException('Invariant du portefeuille violé.');
         }

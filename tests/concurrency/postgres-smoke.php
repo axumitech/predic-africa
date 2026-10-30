@@ -44,6 +44,17 @@ $intent = ['kind' => 'deposit', 'amount' => '1234.56', 'reference' => (string) S
 $payment = app(Payments::class)->create($user->id, $intent);
 app(Payments::class)->create($user->id, $intent);
 verify($calls === 1, 'Duplicate provider initiation.');
+$super = User::create(['name' => 'Superadmin isolé', 'email' => "super-$id@example.invalid", 'password' => 'isolated-control-password']);
+$super->role = 'superadmin'; $super->save();
+Illuminate\Support\Facades\Auth::setUser($super);
+$settings = app(App\Modules\Infrastructure\Settings::class);
+$control = app(App\Modules\Infrastructure\ControlController::class);
+$change = [...$settings->current(), 'deposits_enabled' => false, 'current_password' => 'isolated-control-password', 'reason' => 'Validation PostgreSQL de la pause des dépôts'];
+$controlRequest = Illuminate\Http\Request::create('/superadmin/settings', 'POST', $change);
+$controlRequest->setUserResolver(fn () => $super);
+$control->update($controlRequest, $settings);
+verify(! $settings->acceptingDeposits() && $settings->current()['revision'] === 1, 'PostgreSQL control update failed.');
+verify(DB::table('infrastructure_audit')->where('action', 'settings.updated')->count() === 1, 'Control update not audited.');
 $raw = json_encode(['event' => 'deposit.updated', 'data' => ['depositId' => 'pg-isolated-1', 'status' => 'COMPLETED']]);
 $timestamp = time();
 $request = Illuminate\Http\Request::create('/webhooks/ndsgpay', 'POST', [], [], [], [
@@ -57,6 +68,7 @@ $event = DB::table('payment_inbox')->where('provider_id', 'pg-isolated-1')->sole
 app(App\Modules\Payments\Inbox::class)->process($event->id);
 app(Payments::class)->refresh($payment);
 verify((int) DB::table('payment_wallets')->where('user_id', $user->id)->value('balance') === 123456, 'CDF deposit mismatch.');
+echo "PASS PostgreSQL superadmin settings, audit and confirmation while deposits paused\n";
 echo "PASS PostgreSQL exact CDF credit / idempotent provider initiation and completion\n";
 $market = DB::table('markets')->insertGetId(['creator_id' => $user->id, 'title' => 'Validation PostgreSQL isolée',
     'description' => 'Source de test hors production.', 'category' => 'Sport', 'status' => 'open',
@@ -71,7 +83,9 @@ $xaf = User::create(['name' => 'Validation XAF isolée', 'email' => "xaf-$id@exa
 DB::transaction(fn () => app(Ledger::class)->transfer($xaf->id, (string) Str::uuid(), 'Dépôt NDSGPay', 1000, true));
 app(PlacePosition::class)->place($xaf->id, $market, 'yes', 100, (string) Str::uuid());
 DB::table('markets')->where('id', $market)->update(['closes_at' => now()->subSecond()]);
-DB::table('fx_snapshots')->update(['as_of' => now()->subSeconds(config('fx.max_age_seconds') + 1)]);
+foreach (DB::table('fx_snapshots')->get() as $snapshot) {
+    DB::table('fx_snapshots')->where('id', $snapshot->id)->update(['as_of' => now()->subSeconds(config('fx.max_age_seconds') + 1000 + $snapshot->id)]);
+}
 verify(! app(RateBook::class)->view('CDF')['available'], 'Stale rate accepted.');
 app(ResolveMarket::class)->resolve($market, 'yes', 'Résultat du scénario isolé PostgreSQL');
 app(ResolveMarket::class)->resolve($market, 'yes', 'Rejeu du résultat isolé PostgreSQL');

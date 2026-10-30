@@ -26,7 +26,7 @@ export default function NdsgpayWallet({ data }: { data?: NdsgpayWalletData }) {
         const timer = window.setInterval(() => {
             if (document.visibilityState !== 'visible') return;
             if (++polls > 20) { window.clearInterval(timer); return; }
-            router.reload({ only: ['ndsgpay', 'balance', 'balance_exact', 'walletStats', 'transactions'] });
+            router.reload({ only: ['ndsgpay', 'wallets', 'balance', 'balance_exact', 'walletStats', 'transactions'] });
         }, 15000);
         return () => window.clearInterval(timer);
     }, [active]);
@@ -38,9 +38,9 @@ export default function NdsgpayWallet({ data }: { data?: NdsgpayWalletData }) {
             : blocked ? <div className="ds-alert ds-alert--warning"><strong>Un dépôt est déjà en cours.</strong><p>Attendez sa confirmation ou contactez le support avec sa référence. Ne relancez pas le paiement.</p></div>
             : data.correspondents.length > 0 ? <ActionForm action="/wallet/ndsgpay" initial={{ kind: 'deposit', amount: '1000', reference: crypto.randomUUID(), correspondent: data.correspondents[0], msisdn: '' }} freshReference fields={[
                 { name: 'amount', label: `Montant en ${data.currency}`, type: 'number', min: Number(data.min_amount), max: Number(data.max_amount), step: data.scale ? '0.01' : '1', hint: `De ${data.min_amount} à ${data.max_amount} ${data.currency}.` },
-                { name: 'correspondent', label: 'Opérateur activé', options: data.correspondents.map(value => ({ value, label: data.correspondent_labels?.[value] ?? value })) },
-                { name: 'msisdn', label: 'Numéro Mobile Money', type: 'tel', hint: 'Format international avec l’indicatif du pays.' },
-            ]} submit="Continuer le dépôt" /> : <p>Aucun opérateur n’est disponible pour le moment.</p>}
+                { name: 'correspondent', label: 'Pays et opérateur', options: data.correspondents.map(value => ({ value, label: data.correspondent_labels?.[value] ?? value })) },
+                { name: 'msisdn', label: 'Numéro Mobile Money', type: 'tel', hint: 'Format international avec l’indicatif du pays de l’opérateur choisi.' },
+            ]} submit="Continuer le dépôt" /> : <p>Aucun opérateur de dépôt n’est activé pour cette devise.</p>}
         <p className="p-payment-security">Ne saisissez jamais votre code Mobile Money sur ce site. Les retraits ne sont pas disponibles actuellement.</p>
         {!!data?.payments.length && <section className="p-payment-history" aria-label="Suivi des paiements"><h3>Suivi des paiements</h3>{data.payments.map(payment => <article className="p-payment-item" key={payment.id}>
             <div className="p-payment-item-heading"><strong>{payment.kind === 'deposit' ? 'Dépôt' : 'Retrait'} · {formatMinor(payment.amount, payment.currency)} {payment.currency}</strong><Badge tone={payment.local_state === 'completed' ? 'success' : payment.local_state === 'failed' ? 'danger' : 'warning'}>{labels[payment.local_state] || 'Vérification nécessaire'}</Badge></div>

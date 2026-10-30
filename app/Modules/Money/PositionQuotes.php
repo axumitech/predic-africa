@@ -35,7 +35,7 @@ class PositionQuotes
         if ($market->status !== 'open' || now()->gte($market->closes_at)) {
             throw ValidationException::withMessages(['amount' => 'Ce marché est fermé aux nouvelles positions.']);
         }
-        $currency = DB::table('payment_wallets')->where('user_id', $user->id)->value('currency') ?? 'XAF';
+        $currency = \App\Modules\Money\Wallets::currency($user->id);
         $rate = app(RateBook::class)->fresh($currency);
         $stake = Money::minor($amount, $currency);
         if ($stake < Money::minor($rate['min_stake'], $currency) || $stake > Money::minor($rate['max_stake'], $currency)) {

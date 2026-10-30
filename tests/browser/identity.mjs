@@ -49,7 +49,7 @@ try {
     const old = await client();
     const admin = await client();
     await current.get('/register');
-    assert.equal((await post(current, '/register', { name: 'Identity HTTP', email: 'identity@example.test', password: 'identity-password-123', password_confirmation: 'identity-password-123', country: 'GAB', currency: 'XAF' })).status(), 302);
+    assert.equal((await post(current, '/register', { name: 'Identity HTTP', email: 'identity@example.test', password: 'identity-password-123', password_confirmation: 'identity-password-123', country: 'GAB', currency: 'XAF', phone: '+24177000000' })).status(), 302);
     await login(old, 'identity@example.test', 'identity-password-123');
     await login(admin, 'admin@example.test', 'e2e-password-123');
     let response = await current.get('/profile');

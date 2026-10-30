@@ -24,12 +24,14 @@ class HandleInertiaRequests extends Middleware
             'auth' => fn () => $request->user() ? [
                 ...$request->user()->only('id', 'name', 'email', 'role', 'country'),
                 'country_name' => config('regions.countries')[$request->user()->country]['name'] ?? null,
-                'wallet_currency' => DB::table('payment_wallets')->where('user_id', $request->user()->id)->value('currency') ?? 'XAF',
+                'wallet_currency' => \App\Modules\Money\Wallets::currency($request->user()->id),
             ] : null,
-            'balance' => fn () => $request->user() ? (int) DB::table('accounts')->where('user_id', $request->user()->id)->value('balance') : 0,
-            'balance_exact' => fn () => $request->user() ? (string) (DB::table('accounts')->where('user_id', $request->user()->id)->value('balance') ?? 0) : '0',
+            'wallets' => fn () => $request->user() ? DB::table('payment_wallets')->where('user_id', $request->user()->id)->orderBy('id')->get()->map(function ($wallet) { $wallet->balance = (string) $wallet->balance; return $wallet; }) : [],
+            'walletCurrencies' => array_keys(\App\Modules\Money\Money::SCALES),
+            'balance' => fn () => $request->user() ? (int) DB::table('accounts')->where('user_id', $request->user()->id)->where('currency', \App\Modules\Money\Wallets::currency($request->user()->id))->value('balance') : 0,
+            'balance_exact' => fn () => $request->user() ? (string) (DB::table('accounts')->where('user_id', $request->user()->id)->where('currency', \App\Modules\Money\Wallets::currency($request->user()->id))->value('balance') ?? 0) : '0',
             'fx' => fn () => app(\App\Modules\Money\RateBook::class)->view($request->user()
-                ? (DB::table('payment_wallets')->where('user_id', $request->user()->id)->value('currency') ?? 'XAF') : 'XAF'),
+                ? (\App\Modules\Money\Wallets::currency($request->user()->id)) : 'XAF'),
             'unread' => fn () => $request->user() ? DB::table('platform_notifications')->where('user_id', $request->user()->id)->whereNull('read_at')->count() : 0,
             'flash' => fn () => ['success' => $request->session()->get('success')],
         ];

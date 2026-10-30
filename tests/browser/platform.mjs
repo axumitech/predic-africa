@@ -100,7 +100,7 @@ try {
     await page.goto(`${base}/wallet`);
     await page.locator('h1').waitFor();
     await page.locator('.workspace-splash').waitFor({state:'detached'});
-    assert.match(await page.locator('.p-balance-card h2').innerText(), /0,00\s*CDF/);
+    assert.match(await page.locator('.p-wallet-slide[aria-hidden="false"] .p-wallet-card-amount').innerText(), /0,00\s*CDF/);
     await page.getByText('Les dépôts sont temporairement indisponibles.', {exact:true}).waitFor();
     assert.equal(await page.getByRole('button', {name:'Continuer le dépôt'}).count(), 0);
     await page.getByRole('button', {name:'Se déconnecter',exact:true}).click();
@@ -116,7 +116,7 @@ try {
     await page.getByRole('link', { name: 'Gérer mon portefeuille' }).click();
     php(['tests/browser/fund.php', 'trader@example.test']);
     await page.reload();
-    assert.match(await page.locator('.p-balance-card h2').innerText(), /1\s?000/);
+    assert.match(await page.locator('.p-wallet-slide[aria-hidden="false"] .p-wallet-card-amount').innerText(), /1\s?000/);
     await page.getByRole('link', { name: 'Créer un marché', exact: false }).click();
     await page.getByLabel('Question du marché').fill('Le scénario E2E sera-t-il validé ?');
     await page.getByLabel('Règles de résolution et source').fill('Oui si le test se termine correctement. Source : résultat E2E.');

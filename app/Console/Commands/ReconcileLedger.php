@@ -22,7 +22,7 @@ class ReconcileLedger extends Command
             ->whereRaw('COALESCE(entries.entry_count, 0) <> 2 OR entries.total <> 0 OR entries.account_count <> 2')->count();
         $this->line("Comptes incohérents : $accounts ; transactions déséquilibrées ou incomplètes : $transactions.");
 
-        $wallets = DB::table('payment_wallets')->leftJoin('accounts', 'accounts.user_id', '=', 'payment_wallets.user_id')
+        $wallets = DB::table('payment_wallets')->leftJoin('accounts', fn ($join) => $join->on('accounts.user_id', '=', 'payment_wallets.user_id')->on('accounts.currency', '=', 'payment_wallets.currency'))
             ->where(fn ($query) => $query->whereNull('accounts.id')->orWhereColumn('accounts.balance', '!=', 'payment_wallets.balance'))->count();
         if ($wallets > 0) {
             $this->line("Portefeuilles désynchronisés : $wallets.");
@@ -30,7 +30,7 @@ class ReconcileLedger extends Command
         $currencyErrors = DB::table('ledger_entries as e')->join('accounts as a', 'a.id', '=', 'e.account_id')
             ->join('ledger_transactions as t', 't.id', '=', 'e.transaction_id')
             ->where(fn ($q) => $q->whereColumn('e.currency', '!=', 'a.currency')->orWhereColumn('e.currency', '!=', 't.currency'))->count();
-        $currencyErrors += DB::table('payment_wallets as w')->join('accounts as a', 'a.user_id', '=', 'w.user_id')
+        $currencyErrors += DB::table('payment_wallets as w')->join('accounts as a', fn ($join) => $join->on('a.user_id', '=', 'w.user_id')->on('a.currency', '=', 'w.currency'))
             ->whereColumn('w.currency', '!=', 'a.currency')->count();
         $currencyErrors += DB::table('payment_movements as m')->join('ledger_transactions as t', 't.id', '=', 'm.ledger_transaction_id')
             ->whereColumn('m.currency', '!=', 't.currency')->count();

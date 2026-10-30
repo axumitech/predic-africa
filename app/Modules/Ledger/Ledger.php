@@ -27,17 +27,19 @@ class Ledger
         // Serialize all ledger writers before checking the reference, including
         // callers that do not already hold the user's lock.
         DB::table('users')->where('id', $userId)->lockForUpdate()->firstOrFail();
-        DB::table('payment_wallets')->insertOrIgnore(['user_id' => $userId, 'currency' => 'XAF', 'balance' => 0]);
-        $walletCurrency = DB::table('payment_wallets')->where('user_id', $userId)->value('currency');
-        Money::scale($walletCurrency);
-        if ($currency !== null && $currency !== $walletCurrency) {
+        $currency ??= \App\Modules\Money\Wallets::currency($userId);
+        Money::scale($currency);
+        if (! DB::table('payment_wallets')->where('user_id', $userId)->exists()) {
+            DB::table('payment_wallets')->insert(['user_id' => $userId, 'currency' => 'XAF', 'balance' => 0]);
+        }
+        if (! DB::table('payment_wallets')->where('user_id', $userId)->where('currency', $currency)->exists()) {
             throw ValidationException::withMessages(['amount' => 'Devise incompatible avec le portefeuille.']);
         }
-        $currency = $walletCurrency;
+        $accountCode = \App\Modules\Money\Wallets::accountCode($userId, $currency);
         $treasury = $currency === 'XAF' ? 'treasury' : 'treasury:'.$currency;
         DB::table('accounts')->insertOrIgnore(['code' => $treasury, 'currency' => $currency, 'balance' => 0]);
-        DB::table('accounts')->insertOrIgnore(['code' => "user:$userId", 'user_id' => $userId, 'currency' => $currency, 'balance' => 0]);
-        $accounts = DB::table('accounts')->whereIn('code', [$treasury, "user:$userId"])->orderBy('id')->lockForUpdate()->get();
+        DB::table('accounts')->insertOrIgnore(['code' => $accountCode, 'user_id' => $userId, 'currency' => $currency, 'balance' => 0]);
+        $accounts = DB::table('accounts')->whereIn('code', [$treasury, $accountCode])->orderBy('id')->lockForUpdate()->get();
         $account = $accounts->firstWhere('user_id', $userId);
         $bank = $accounts->firstWhere('code', $treasury);
         // Preserve existing fingerprints; the immutable signed entry also binds
@@ -53,7 +55,7 @@ class Ledger
 
             return $prior->id;
         }
-        $wallet = DB::table('payment_wallets')->where('user_id', $userId)->lockForUpdate()->firstOrFail();
+        $wallet = DB::table('payment_wallets')->where('user_id', $userId)->where('currency', $currency)->lockForUpdate()->firstOrFail();
         if ($wallet->currency !== $currency || $account->currency !== $currency || $bank->currency !== $currency
             || (int) $wallet->balance !== (int) $account->balance) {
             throw new \LogicException('Solde du portefeuille et journal incohérents.');

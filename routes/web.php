@@ -35,6 +35,10 @@ Route::middleware('guest')->group(function () {
 });
 Route::post('/logout', [IdentityController::class, 'logout'])->middleware('auth');
 Route::middleware(['auth'])->group(function () {
+    Route::post('/wallets/transfers/quote', [\App\Http\Controllers\WalletTransferController::class, 'quote'])->middleware('throttle:20,1');
+    Route::post('/wallets/transfers', [\App\Http\Controllers\WalletTransferController::class, 'confirm'])->middleware('throttle:20,1');
+    Route::post('/wallets', [\App\Http\Controllers\WalletController::class, 'store'])->middleware('throttle:20,1');
+    Route::post('/wallets/select', [\App\Http\Controllers\WalletController::class, 'select'])->middleware('throttle:30,1');
     Route::get('/fx/rates', [FxController::class, 'rates'])->middleware('throttle:60,1');
     foreach (['dashboard', 'markets', 'positions', 'transactions', 'wallet', 'creator', 'support', 'notifications', 'profile', 'predictions', 'admin', 'admin/markets', 'admin/users', 'admin/pipeline'] as $path) {
         Route::get('/'.$path, fn (Request $request) => app(PlatformController::class)->page($request, str_replace('/', '-', $path)));

@@ -8,7 +8,7 @@ type Quote = { id: string; currency: string; outcome: string; odds: number; amou
 const displayDecimal = formatDecimal;
 export default function PositionOrder({ market, balance, currency }: { market: Market; balance: Minor; currency: string }) {
     const { fx, fresh } = useCurrency();
-    const form = useForm({ amount: currency === 'XAF' ? '100' : fx?.min_stake || '', outcome: 'yes', reference: crypto.randomUUID(), quote_id: '' });
+    const form = useForm({ currency, amount: currency === 'XAF' ? '100' : fx?.min_stake || '', outcome: 'yes', reference: crypto.randomUUID(), quote_id: '' });
     const [quote, setQuote] = useState<Quote | null>(null);
     const [loading, setLoading] = useState(false);
     const [remaining, setRemaining] = useState(0);
@@ -36,7 +36,7 @@ export default function PositionOrder({ market, balance, currency }: { market: M
             const token = cookie ? decodeURIComponent(cookie.slice('XSRF-TOKEN='.length)) : document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
             const response = await fetch(`/markets/${market.id}/quote`, { method: 'POST', credentials: 'same-origin', signal: pending.current.signal,
                 headers: { Accept: 'application/json', 'Content-Type': 'application/json', [cookie ? 'X-XSRF-TOKEN' : 'X-CSRF-TOKEN']: token, 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ amount: form.data.amount, outcome: form.data.outcome, reference: form.data.reference }) });
+                body: JSON.stringify({ currency, amount: form.data.amount, outcome: form.data.outcome, reference: form.data.reference }) });
             if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
                 const errors = body.errors ? Object.values(body.errors).flat().join(' ') : response.status === 419 || response.status === 401 ? 'Votre session a expiré. Reconnectez-vous avant de continuer.' : 'La confirmation est indisponible. Réessayez.';

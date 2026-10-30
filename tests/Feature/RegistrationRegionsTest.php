@@ -18,7 +18,10 @@ class RegistrationRegionsTest extends TestCase
 
     private function registration(array $changes = []): array
     {
-        return [...['name' => 'Compte régional', 'email' => 'region@example.test',
+        $country = $changes['country'] ?? 'GAB';
+        $plan = is_string($country) ? config('regions.phones.'.$country) : null;
+        $plan ??= config('regions.phones.GAB');
+        return [...['phone' => '+'.$plan['calling_code'].$plan['example'], 'name' => 'Compte régional', 'email' => 'region@example.test',
             'password' => 'regional-password-123', 'password_confirmation' => 'regional-password-123',
             'country' => 'GAB', 'currency' => 'XAF'], ...$changes];
     }
@@ -52,6 +55,9 @@ class RegistrationRegionsTest extends TestCase
         $user = User::sole();
         $this->assertAuthenticatedAs($user);
         $this->assertSame($country, $user->country);
+        $plan = config('regions.phones.'.$country);
+        $this->assertSame('+'.$plan['calling_code'].$plan['example'], $user->phone);
+        $this->assertArrayNotHasKey('phone', $user->toArray());
         $this->assertDatabaseHas('payment_wallets', ['user_id' => $user->id, 'currency' => $currency, 'balance' => 0]);
         $this->assertDatabaseHas('accounts', ['user_id' => $user->id, 'balance' => 0]);
         $this->assertDatabaseCount('payments', 0);
@@ -75,6 +81,56 @@ class RegistrationRegionsTest extends TestCase
             'array currency' => [['currency' => ['XAF']], ['currency']],
             'unrecognised casing' => [['country' => 'gab'], ['country', 'currency']],
         ];
+    }
+
+    public static function invalidPhones(): array
+    {
+        return [[null], [''], ['+243810000000'], ['7700000'], ['77000000000000000'],
+            ['+24100000000'], ['abc77000000'], [['77000000']], ['+24177000000 ext 2']];
+    }
+
+    #[DataProvider('invalidPhones')]
+    public function test_phone_is_required_and_must_match_selected_country(mixed $phone): void
+    {
+        $this->postJson('/register', $this->registration(['phone' => $phone]))
+            ->assertUnprocessable()->assertJsonValidationErrors('phone');
+        $this->assertGuest();
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('payment_wallets', 0);
+    }
+
+    public static function normalizedPhones(): array
+    {
+        return [
+            ['GAB', 'XAF', '077 00 00 00', '+24177000000'],
+            ['COD', 'CDF', '081 000 0000', '+243810000000'],
+            ['COD', 'CDF', '+243 81 000 0000', '+243810000000'],
+            ['COD', 'CDF', '243810000000', '+243810000000'],
+            ['BEN', 'XOF', '01 97 00 00 00', '+2290197000000'],
+            ['CIV', 'XOF', '07 00 00 00 00', '+2250700000000'],
+            ['COG', 'XAF', '06 000 0000', '+242060000000'],
+        ];
+    }
+
+    #[DataProvider('normalizedPhones')]
+    public function test_phone_is_normalized_without_losing_significant_zeros(string $country, string $currency, string $phone, string $expected): void
+    {
+        $this->post('/register', $this->registration(compact('country', 'currency', 'phone')))
+            ->assertRedirect('/dashboard')->assertSessionHasNoErrors();
+        $this->assertSame($expected, User::sole()->phone);
+        $this->get('/profile')->assertInertia(fn (Assert $page) => $page->missing('auth.phone'));
+    }
+
+    public function test_phone_migration_preserves_existing_accounts_and_money(): void
+    {
+        $user = User::factory()->create();
+        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 1000, true));
+        $migration = require database_path('migrations/2026_10_30_000001_add_registration_phone.php');
+        $migration->down();
+        $migration->up();
+        $this->assertNull($user->fresh()->phone);
+        $this->assertDatabaseHas('payment_wallets', ['user_id' => $user->id, 'balance' => 1000]);
+        $this->assertDatabaseCount('ledger_transactions', 1);
     }
 
     #[DataProvider('invalidSelections')]
@@ -137,7 +193,7 @@ class RegistrationRegionsTest extends TestCase
 
     public static function incompatibleWallets(): array
     {
-        return ['other country, same currency' => ['CMR', 'XAF'], 'other country and currency' => ['COD', 'CDF']];
+        return ['other country and currency' => ['COD', 'CDF']];
     }
 
     public function test_a_cdf_wallet_cannot_be_debited_as_if_it_were_xaf(): void

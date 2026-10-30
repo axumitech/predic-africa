@@ -43,10 +43,10 @@ try {
     await page.getByRole('dialog').filter({hasText:'Vérifier avant de confirmer'}).waitFor();
     await page.getByRole('button',{name:'Valider définitivement'}).click();
     await page.getByRole('button',{name:'Actualiser le statut'}).waitFor();
-    assert.match(await page.locator('.p-balance-card h2').innerText(),/0,00\s*CDF/);
+    assert.match(await page.locator('.p-wallet-slide[aria-hidden="false"] .p-wallet-card-amount').innerText(),/0,00\s*CDF/);
     await page.getByRole('button',{name:'Actualiser le statut'}).click();
     await page.getByText('Succès confirmé',{exact:true}).waitFor();
-    assert.match(await page.locator('.p-balance-card h2').innerText(),/1\s?234,56\s*CDF/);
+    assert.match(await page.locator('.p-wallet-slide[aria-hidden="false"] .p-wallet-card-amount').innerText(),/1\s?234,56\s*CDF/);
     await page.screenshot({path:'test-results/fx/wallet-cdf.png',fullPage:true});
     await navigate(`/markets/${fixture.market}`);
     await page.evaluate(() => { document.cookie = 'XSRF-TOKEN=; Max-Age=0; path=/'; });

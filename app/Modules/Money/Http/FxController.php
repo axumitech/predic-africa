@@ -13,12 +13,15 @@ class FxController extends Controller
 {
     public function rates(Request $request, RateBook $rates)
     {
-        $currency = DB::table('payment_wallets')->where('user_id', $request->user()->id)->value('currency') ?? 'XAF';
+        $currency = \App\Modules\Money\Wallets::currency($request->user()->id);
         return response()->json($rates->view($currency))->header('Cache-Control', 'private, no-store');
     }
 
     public function quote(Request $request, int $id, PositionQuotes $quotes)
     {
+        if ($request->has('currency') && $request->input('currency') !== \App\Modules\Money\Wallets::currency($request->user()->id)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['amount' => 'Le portefeuille actif a changé. Actualisez la page.']);
+        }
         $data = $request->validate(['outcome' => ['required', Rule::in(['yes', 'no'])],
             'amount' => 'required', 'reference' => 'required|uuid']);
         $quote = $quotes->create($request->user(), $id, $data['outcome'], $data['amount'], $data['reference']);

@@ -5,17 +5,15 @@ namespace App\Modules\Payments;
 use App\Models\User;
 use App\Modules\Money\Money;
 use App\Modules\Identity\RegistrationRegions;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class Capabilities
 {
     public function forAccount(User $user): array
     {
-        $currency = DB::table('payment_wallets')->where('user_id', $user->id)->value('currency') ?? 'XAF';
+        $currency = \App\Modules\Money\Wallets::currency($user->id);
 
-        return array_values(array_filter($this->enabled(), fn ($capability) => $capability['currency'] === $currency
-            && ($user->country === null || $capability['country'] === $user->country)));
+        return array_values(array_filter($this->enabled(), fn ($capability) => $capability['currency'] === $currency));
     }
 
     public function enabled(): array

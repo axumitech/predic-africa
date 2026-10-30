@@ -15,6 +15,7 @@ class PlatformController extends Controller
     {
         $user = $request->user();
         $data = [];
+        $activeCurrency = $user ? \App\Modules\Money\Wallets::currency($user->id) : 'XAF';
         if ($page === 'home') {
             $data['stats'] = ['volume' => (int) DB::table('positions')->sum('stake'), 'open_markets' => DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->count()];
             $data['markets'] = DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->orderBy('closes_at')->paginate(3);
@@ -23,7 +24,7 @@ class PlatformController extends Controller
             return redirect($user->isSuperadmin() ? '/superadmin' : '/admin');
         }
         if ($page === 'dashboard') {
-            $positions = DB::table('positions')->where('user_id', $user->id);
+            $positions = DB::table('positions')->where('user_id', $user->id)->where('wallet_currency', $activeCurrency);
             $data['stats'] = [
                 'active' => (clone $positions)->where('status', 'open')->count(),
                 'engaged' => (int) (clone $positions)->where('status', 'open')->sum(DB::raw('COALESCE(wallet_stake, stake)')),
@@ -32,7 +33,7 @@ class PlatformController extends Controller
                 'pending' => DB::table('markets')->where('creator_id', $user->id)->where('status', 'pending')->count(),
             ];
             $data['markets'] = DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->orderBy('closes_at')->paginate(6);
-            $data['recentActivity'] = DB::table('ledger_transactions')->where('user_id', $user->id)->select('id', 'kind', 'amount', 'currency', 'created_at')->orderByDesc('id')->limit(5)->get();
+            $data['recentActivity'] = DB::table('ledger_transactions')->where('user_id', $user->id)->where('currency', $activeCurrency)->select('id', 'kind', 'amount', 'currency', 'created_at')->orderByDesc('id')->limit(5)->get();
         }
         if (str_starts_with($page, 'admin')) {
             Gate::authorize('admin');
@@ -93,7 +94,7 @@ class PlatformController extends Controller
         }
         if ($page === 'wallet') {
             $paymentSettings = app(\App\Modules\Infrastructure\Settings::class)->current();
-            $currency = DB::table('payment_wallets')->where('user_id', $user->id)->value('currency') ?? 'XAF';
+            $currency = \App\Modules\Money\Wallets::currency($user->id);
             $data['ndsgpay'] = [
                 'enabled' => app(\App\Modules\Payments\Ndsgpay::class)->ready() && app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(),
                 'maintenance_message' => $paymentSettings['maintenance_message'],
@@ -102,19 +103,19 @@ class PlatformController extends Controller
                 'currency' => $currency,
                 'correspondents' => array_column(app(\App\Modules\Payments\Capabilities::class)->forAccount($user), 'correspondent'),
                 'correspondent_labels' => collect(app(\App\Modules\Payments\Capabilities::class)->forAccount($user))
-                    ->mapWithKeys(fn ($capability) => [$capability['correspondent'] => config('ndsgpay_operators.'.$capability['correspondent'].'.name', $capability['correspondent'])])->all(),
+                    ->mapWithKeys(fn ($capability) => [$capability['correspondent'] => (config('regions.countries.'.$capability['country'].'.name', $capability['country']).' — '.config('ndsgpay_operators.'.$capability['correspondent'].'.name', $capability['correspondent']).' (+'.$capability['calling_code'].')')])->all(),
                 'payoutsEnabled' => false,
-                'balance' => (int) DB::table('payment_wallets')->where('user_id', $request->user()->id)->value('balance'),
-                'payments' => DB::table('payments')->where('user_id', $request->user()->id)->latest('id')->limit(30)
+                'balance' => (int) DB::table('payment_wallets')->where('user_id', $request->user()->id)->where('currency', $activeCurrency)->value('balance'),
+                'payments' => DB::table('payments')->where('user_id', $request->user()->id)->where('currency', $activeCurrency)->latest('id')->limit(30)
                     ->get(['id', 'reference', 'kind', 'amount', 'currency', 'status', 'local_state', 'created_at'])->map(function ($payment) { $payment->amount = (string) $payment->amount; return $payment; }),
             ];
         }
         if (in_array($page, ['transactions', 'wallet'])) {
             $filters = $request->validate(['kind' => 'nullable|string|max:40', 'q' => 'nullable|string|max:100']);
             $data['filters'] = (object) $filters;
-            $ledger = DB::table('ledger_transactions')->where('user_id', $user->id);
+            $ledger = DB::table('ledger_transactions')->where('user_id', $user->id)->where('currency', $activeCurrency);
             $data['walletStats'] = [
-                'engaged' => (int) DB::table('positions')->where('user_id', $user->id)->where('status', 'open')->sum(DB::raw('COALESCE(wallet_stake, stake)')),
+                'engaged' => (int) DB::table('positions')->where('user_id', $user->id)->where('wallet_currency', $activeCurrency)->where('status', 'open')->sum(DB::raw('COALESCE(wallet_stake, stake)')),
                 'gains' => (int) (clone $ledger)->where('kind', 'Gain')->sum('amount'),
                 'deposits' => (int) (clone $ledger)->where('kind', 'Dépôt NDSGPay')->sum('amount'),
                 'withdrawals' => (int) (clone $ledger)->where('kind', 'Retrait NDSGPay')->sum('amount'),
@@ -142,8 +143,8 @@ class PlatformController extends Controller
         }
         if ($page === 'admin-users') {
             $data['users'] = DB::table('users')->select('id', 'name', 'email', 'role', 'suspended', 'created_at')
-                ->selectSub(DB::table('accounts')->selectRaw('COALESCE(SUM(balance), 0)')->whereColumn('user_id', 'users.id'), 'balance')
-                ->selectSub(DB::table('payment_wallets')->select('currency')->whereColumn('user_id', 'users.id'), 'wallet_currency')
+                ->selectSub(DB::table('accounts')->select('balance')->whereColumn('user_id', 'users.id')->orderBy('id')->limit(1), 'balance')
+                ->selectSub(DB::table('payment_wallets')->select('currency')->whereColumn('user_id', 'users.id')->orderBy('id')->limit(1), 'wallet_currency')
                 ->orderByDesc('id')->paginate(20);
         }
         if ($page === 'admin') {
@@ -164,7 +165,7 @@ class PlatformController extends Controller
                 ->groupBy('currency')->orderBy('currency')->get()->map(function ($row) { $row->balance = (string) $row->balance; return $row; });
         }
         if (in_array($page, ['dashboard', 'admin'])) {
-            $activityCurrency = $page === 'admin' ? 'XAF' : (DB::table('payment_wallets')->where('user_id', $user->id)->value('currency') ?? 'XAF');
+            $activityCurrency = $page === 'admin' ? 'XAF' : (\App\Modules\Money\Wallets::currency($user->id));
             $daily = DB::table('ledger_transactions')->where('currency', $activityCurrency)
                 ->when($page !== 'admin', fn ($q) => $q->where('user_id', $user->id))
                 ->where('created_at', '>=', now()->subDays(6)->startOfDay())

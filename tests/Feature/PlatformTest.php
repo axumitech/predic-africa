@@ -77,7 +77,7 @@ class PlatformTest extends TestCase
 
     public function test_registration_authenticates_and_never_accepts_admin_role(): void
     {
-        $this->post('/register', ['name' => 'Trader', 'email' => 'trader@example.test', 'password' => 'test-password-123', 'password_confirmation' => 'test-password-123', 'role' => 'admin', 'country' => 'GAB', 'currency' => 'XAF'])->assertRedirect('/dashboard');
+        $this->post('/register', ['name' => 'Trader', 'email' => 'trader@example.test', 'password' => 'test-password-123', 'password_confirmation' => 'test-password-123', 'role' => 'admin', 'country' => 'GAB', 'currency' => 'XAF', 'phone' => '+24177000000'])->assertRedirect('/dashboard');
         $user = User::first();
         $this->assertAuthenticatedAs($user);
         $this->assertSame('trader', $user->role);

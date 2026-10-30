@@ -110,7 +110,7 @@ class IdentityAuthorizationTest extends TestCase
     public function test_profile_and_registration_never_accept_privileged_fields(): void
     {
         $this->post('/register', ['name' => 'Account', 'email' => 'identity@example.test', 'password' => 'password-123',
-            'country' => 'GAB', 'currency' => 'XAF',
+            'country' => 'GAB', 'currency' => 'XAF', 'phone' => '+24177000000',
             'password_confirmation' => 'password-123', 'role' => 'admin', 'suspended' => true, 'auth_version' => 99,
             'email_verified_at' => now()->toISOString(), 'balance' => 10000])->assertSessionHasNoErrors();
         $user = User::firstOrFail();
@@ -155,7 +155,7 @@ class IdentityAuthorizationTest extends TestCase
 
     public function test_unknown_roles_and_suspended_accounts_cannot_authenticate(): void
     {
-        $unknown = User::factory()->create(['role' => 'superadmin']);
+        $unknown = User::factory()->create(['role' => 'unrecognized-role']);
         $suspended = User::factory()->create(['suspended' => true]);
         foreach ([$unknown, $suspended] as $user) {
             $this->postJson('/login', ['email' => $user->email, 'password' => 'password'])->assertUnprocessable()->assertJsonValidationErrors('email');

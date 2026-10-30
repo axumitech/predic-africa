@@ -65,3 +65,18 @@ reconstruire le cache. Ne pas restaurer une ancienne base après un dépôt rée
 sans rapprochement : une restauration pourrait effacer des confirmations ou
 des crédits reçus après la sauvegarde. Les migrations monétaires ne proposent
 pas de rollback automatique.
+
+## Ajout du téléphone à l'inscription
+
+Mise à jour complémentaire déployée le même jour : migration additive
+`2026_10_30_000001_add_registration_phone`, formulaire et validation serveur.
+12 pays conservés sur demande du propriétaire. Les nouvelles inscriptions
+exigent un téléphone correspondant au pays, normalisé au format international.
+Les anciens comptes conservent un téléphone nul, sans modification des fonds.
+
+Validation : 228 tests / 1 964 assertions ; inscription HTTP, parcours Chrome
+mobile/bureau avec téléphone CDF et contrôles de format. Production : inscription
+HTTP 200, métadonnées téléphoniques des 12 pays et nouveau build présents,
+trois utilisateurs conservés, santé paiements et rapprochements au vert.
+Sauvegarde complémentaire privée : `/var/backups/predicafrica-phone-20261030`.
+Aucun compte réel ou paiement créé pour cette vérification.
