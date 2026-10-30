@@ -97,4 +97,33 @@ class WalletPaymentOperatorsTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
         Http::assertNothingSent();
     }
+
+    public function test_local_and_international_numbers_use_selected_operator_country(): void
+    {
+        $this->gabonAccount();
+        $capabilities = app(\App\Modules\Payments\Capabilities::class);
+        foreach (['081 000 0000', '810000000', '+243 81 000 0000', '243810000000', '00243810000000'] as $phone) {
+            $this->assertSame('243810000000', $capabilities->validate($this->deposit(['msisdn' => $phone]))['msisdn']);
+        }
+        $this->assertSame('24177000000', $capabilities->validate($this->deposit([
+            'correspondent' => 'AIRTEL_GAB', 'msisdn' => '077 00 00 00', 'amount' => '1000',
+        ]))['msisdn']);
+        $this->assertSame('237690000000', $capabilities->validate($this->deposit([
+            'correspondent' => 'ORANGE_CMR', 'msisdn' => '690000000', 'amount' => '1000',
+        ]))['msisdn']);
+        Http::fake(['*/pay/deposits' => Http::response(['success' => true, 'depositId' => 'local-cdf', 'status' => 'INITIATED'])]);
+        $this->post('/wallet/ndsgpay', $this->deposit(['msisdn' => '0810000000']))->assertSessionHasNoErrors();
+        Http::assertSent(fn ($request) => $request['msisdn'] === '243810000000');
+    }
+
+    public function test_invalid_local_numbers_and_wrong_international_country_are_rejected(): void
+    {
+        $this->gabonAccount();
+        foreach (['+24177000000', '0024177000000', '081000000', '08100000000', '81abc000000', '+2430810000000'] as $phone) {
+            $this->postJson('/wallet/ndsgpay', $this->deposit(['msisdn' => $phone]))
+                ->assertUnprocessable()->assertJsonValidationErrors('msisdn');
+        }
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('payments', 0);
+    }
 }

@@ -38,11 +38,31 @@ class Capabilities
         }
         $capability = $matches[0];
         $phone = $data['msisdn'] ?? '';
-        if (! is_string($phone) || ! preg_match('/\A\+?[0-9 ()-]+\z/', $phone)) {
-            throw ValidationException::withMessages(['msisdn' => 'Numéro international invalide.']);
+        if (! is_string($phone) || ! preg_match('/\A\+?[0-9 ()-]+\z/D', trim($phone))) {
+            throw ValidationException::withMessages(['msisdn' => 'Numéro Mobile Money invalide.']);
         }
+        $international = str_starts_with(trim($phone), '+');
         $phone = str_replace(['+', ' ', '(', ')', '-'], '', $phone);
         $prefix = $capability['calling_code'];
+        $lengths = $capability['national_lengths'];
+        if (str_starts_with($phone, '00')) {
+            $international = true;
+            $phone = substr($phone, 2);
+        }
+        $hasPrefix = str_starts_with($phone, $prefix)
+            && in_array(strlen($phone) - strlen($prefix), $lengths, true);
+        if (! $international && ! $hasPrefix) {
+            // Only remove a national trunk prefix for countries that declare one.
+            $trunk = config('regions.phones.'.$capability['country'].'.trunk');
+            if (is_string($trunk) && $trunk !== '' && str_starts_with($phone, $trunk)
+                && in_array(strlen($phone) - strlen($trunk), $lengths, true)) {
+                $phone = substr($phone, strlen($trunk));
+            }
+            if (in_array(strlen($phone), $lengths, true)
+                && ! (is_string($trunk) && $trunk !== '' && str_starts_with($phone, $trunk))) {
+                $phone = $prefix.$phone;
+            }
+        }
         if (! str_starts_with($phone, $prefix) || strlen($phone) > 15
             || ! in_array(strlen($phone) - strlen($prefix), $capability['national_lengths'], true)) {
             throw ValidationException::withMessages(['msisdn' => 'Indicatif ou longueur incompatible avec le pays sélectionné.']);
