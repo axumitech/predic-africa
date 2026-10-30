@@ -132,3 +132,9 @@
         padding: 40px 0;
     }
 }
+
+.pa-register-phone { display: flex; align-items: stretch; min-width: 0; border: 1px solid #c7d2df; border-radius: 10px; background: #fff; overflow: hidden; }
+.pa-register-phone:focus-within { outline: 3px solid #f0b40b25; border-color: var(--pa-focus); }
+.pa-register-phone:has(input[aria-invalid=true]) { border-color: #a82f3d; }
+.pa-register-phone-prefix { display: flex; align-items: center; padding: 0 14px; flex-shrink: 0; border-right: 1px solid #d8e1eb; background: #f5f8fc; color: var(--pa-navy); font-size: 15px; font-weight: 600; }
+.pa-register .pa-register-phone input { min-width: 0; width: 100%; border: 0; border-radius: 0; outline: none; box-shadow: none; }

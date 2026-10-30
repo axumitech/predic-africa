@@ -28,6 +28,7 @@ class Payments
     {
         abort_unless(app(PaymentPolicy::class)->deposit(User::findOrFail($userId)), 403);
         abort_if(($data['kind'] ?? '') !== 'deposit', 403, 'Payouts désactivés.');
+        abort_unless(app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(), 503, 'Les dépôts sont temporairement indisponibles.');
         abort_unless(app(Ndsgpay::class)->ready(), 503, 'NDSGPay non configuré.');
         abort_if(app()->isProduction() && (config('app.debug') || in_array(config('queue.default'), ['sync', 'null', 'deferred', 'background'])), 503, 'Configuration de production incomplète.');
         abort_unless(Str::isUuid($data['reference'] ?? ''), 422);
@@ -37,6 +38,11 @@ class Payments
             $payment = DB::transaction(function () use ($userId, $data, $fingerprint) {
                 $user = DB::table('users')->where('id', $userId)->lockForUpdate()->firstOrFail();
                 abort_if($user->suspended, 403);
+                DB::table('infrastructure_settings')->where('id', 1)->lockForUpdate()->firstOrFail();
+                abort_unless(app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(), 503, 'Les dépôts sont temporairement indisponibles.');
+                $limits = app(\App\Modules\Infrastructure\Settings::class)->current();
+                abort_if($data['amount'] < Money::minor($limits['min_amount'], $data['currency']) || $data['amount'] > Money::minor($limits['max_amount'], $data['currency']), 422, 'Limites de dépôt modifiées.');
+                abort_unless(in_array($data['correspondent'], array_column(app(Capabilities::class)->enabled(), 'correspondent'), true), 422, 'Opérateur suspendu.');
                 $prior = DB::table('payments')->where('reference', $data['reference'])->first();
                 if ($prior) {
                     $matches = $prior->fingerprint && hash_equals($prior->fingerprint, $fingerprint);

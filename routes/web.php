@@ -76,3 +76,9 @@ Route::middleware(['auth', 'throttle:20,1'])->group(function () {
     Route::post('/wallet/ndsgpay', [NdsgpayController::class, 'store']);
     Route::post('/wallet/ndsgpay/{id}/refresh', [NdsgpayController::class, 'refresh'])->whereNumber('id');
 });
+
+Route::middleware(['auth', 'can:superadmin'])->prefix('superadmin')->group(function () {
+    Route::get('/', [\App\Modules\Infrastructure\ControlController::class, 'index']);
+    Route::post('/settings', [\App\Modules\Infrastructure\ControlController::class, 'update'])->middleware('throttle:6,1');
+    Route::post('/operations/{action}', [\App\Modules\Infrastructure\ControlController::class, 'operation'])->whereIn('action', ['reconcile', 'fx'])->middleware('throttle:3,1');
+});

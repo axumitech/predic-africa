@@ -20,7 +20,7 @@ class Capabilities
 
     public function enabled(): array
     {
-        return array_values(array_filter(config('payments.capabilities'), fn ($c) => is_array($c)
+        return array_values(array_filter(app(\App\Modules\Infrastructure\Settings::class)->capabilities(), fn ($c) => is_array($c)
             && is_string($c['currency'] ?? null)
             && isset(Money::SCALES[$c['currency'] ?? ''])
             && in_array($c['currency'], app(RegistrationRegions::class)->currenciesFor($c['country'] ?? null), true)
@@ -52,8 +52,9 @@ class Capabilities
         // Wallet topup is an explicitly authorized variable-amount business rule,
         // not a browser-supplied order price. Currency and owner are server-derived.
         $amount = Money::minor($data['amount'] ?? null, $capability['currency']);
-        if ($amount < Money::minor((string) config('payments.min_amount'), $capability['currency'])
-            || $amount > Money::minor((string) config('payments.max_amount'), $capability['currency'])) {
+        $settings = app(\App\Modules\Infrastructure\Settings::class)->current();
+        if ($amount < Money::minor($settings['min_amount'], $capability['currency'])
+            || $amount > Money::minor($settings['max_amount'], $capability['currency'])) {
             throw ValidationException::withMessages(['amount' => 'Montant hors des limites autorisées.']);
         }
 

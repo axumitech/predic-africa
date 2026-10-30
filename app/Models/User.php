@@ -10,6 +10,16 @@ use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
+    public function isAdministrator(): bool
+    {
+        return in_array($this->role, ['admin', 'superadmin'], true);
+    }
+
+    public function isSuperadmin(): bool
+    {
+        return $this->role === 'superadmin';
+    }
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
@@ -23,6 +33,7 @@ class User extends Authenticatable
         'email',
         'password',
         'country',
+        'phone',
     ];
 
     /**
@@ -34,6 +45,7 @@ class User extends Authenticatable
         'password',
         'remember_token',
         'auth_version',
+        'phone',
     ];
 
     /**

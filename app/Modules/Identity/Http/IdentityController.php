@@ -5,6 +5,7 @@ namespace App\Modules\Identity\Http;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Identity\RegistrationRegions;
+use App\Modules\Identity\RegistrationPhone;
 use App\Modules\Identity\SessionAccess;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -30,6 +31,7 @@ class IdentityController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:100', 'email' => 'required|email|max:255|unique:users',
             'password' => ['required', 'confirmed', Password::min(10)],
+            'phone' => ['required', 'string', 'max:32'],
             'country' => ['bail', 'required', 'string', Rule::in(array_keys(config('regions.countries')))],
             'currency' => ['bail', 'required', 'string', Rule::in(app(RegistrationRegions::class)->currenciesFor($request->input('country')))],
         ], [
@@ -37,7 +39,9 @@ class IdentityController extends Controller
             'country.in' => 'Ce pays n’est pas disponible à l’inscription.',
             'currency.required' => 'Choisissez la devise de votre portefeuille.',
             'currency.in' => 'Cette devise n’est pas disponible pour le pays choisi.',
+            'phone.required' => 'Renseignez votre numéro de téléphone.',
         ]);
+        $data['phone'] = app(RegistrationPhone::class)->normalize($data['country'], $data['phone']);
         try {
             $user = DB::transaction(function () use ($data) {
                 $user = User::create(\Illuminate\Support\Arr::except($data, ['currency']));
@@ -62,14 +66,14 @@ class IdentityController extends Controller
     public function login(Request $request)
     {
         $data = $request->validate(['email' => 'required|email', 'password' => 'required|string']);
-        if (! Auth::attemptWhen([...$data, 'suspended' => false], fn (User $user) => in_array($user->role, ['trader', 'admin'], true))) {
+        if (! Auth::attemptWhen([...$data, 'suspended' => false], fn (User $user) => in_array($user->role, ['trader', 'admin', 'superadmin'], true))) {
             throw ValidationException::withMessages(['email' => 'Identifiants incorrects ou compte suspendu.']);
         }
         $request->session()->regenerate();
 
         SessionAccess::establish($request, Auth::user());
 
-        return redirect()->intended(Auth::user()->role === 'admin' ? '/admin' : '/dashboard');
+        return redirect()->intended(Auth::user()->isSuperadmin() ? '/superadmin' : (Auth::user()->isAdministrator() ? '/admin' : '/dashboard'));
     }
 
     public function logout(Request $request)
@@ -135,9 +139,10 @@ class IdentityController extends Controller
             // Lock actor and target in the same order for mutual suspensions.
             $users = User::whereIn('id', [$request->user()->id, $id])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $actor = $users->get($request->user()->id);
-            abort_unless($actor && $actor->role === 'admin' && ! $actor->suspended, 403);
+            abort_unless($actor && $actor->isAdministrator() && ! $actor->suspended, 403);
             $target = $users->get($id);
             abort_unless($target, 404);
+            abort_if($target->isSuperadmin() && ! $actor->isSuperadmin(), 403, 'Compte superadmin protégé.');
             $suspended = (bool) $data['suspended'];
             if ($suspended && ! $target->suspended) {
                 $target->auth_version++;

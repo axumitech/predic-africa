@@ -24,7 +24,7 @@ Artisan::command('fx:refresh', function (RateSync $sync) {
     return $ok ? 0 : 1;
 })->purpose('Récupérer les taux CurrencyAPI sans afficher la clé ni inventer un taux de secours');
 // Hourly wakeup; RateSync permits only one provider request per 24 hours.
-Schedule::command('fx:refresh')->hourly()->withoutOverlapping()->when(fn () => config('fx.refresh_enabled') && filled(config('fx.key')));
+Schedule::command('fx:refresh')->hourly()->withoutOverlapping()->when(fn () => config('fx.refresh_enabled') && filled(config('fx.key')) && app(\App\Modules\Infrastructure\Settings::class)->current()['fx_refresh_enabled']);
 
 Artisan::command('fx:status', function (RateBook $book) {
     $this->line('currencyapi_key: '.(config('fx.key') ? 'PRESENT' : 'MISSING'));
@@ -42,6 +42,7 @@ Artisan::command('platform:admin {email}', function () {
 
         return 1;
     }
+    if ($user->isSuperadmin()) { $this->error('Superadmin protégé.'); return 1; }
     $user->role = 'admin';
     $user->save();
     $this->info('Rôle administrateur attribué.');
@@ -112,3 +113,26 @@ Artisan::command('payments:accept-late-deposit {reference} {--actor=} {--case=}'
         return 1;
     }
 })->purpose('Résoudre explicitement un dépôt FAILED devenu COMPLETED après investigation opérateur');
+
+Schedule::call(fn () => \App\Modules\Infrastructure\Settings::heartbeat('scheduler'))->everyMinute()->evenInMaintenanceMode();
+
+Artisan::command('platform:superadmin {email}', function () {
+    $user = User::where('email', $this->argument('email'))->first();
+    if (! $user || $user->suspended) {
+        $this->error('Créez et activez ce compte via /register avant sa promotion.');
+        return 1;
+    }
+    DB::transaction(function () use ($user) {
+        $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+        if ($locked->role === 'superadmin') return;
+        DB::table('infrastructure_audit')->insert(['action' => 'role.superadmin.granted',
+            'before' => json_encode(['user_id' => $locked->id, 'role' => $locked->role]),
+            'after' => json_encode(['user_id' => $locked->id, 'role' => 'superadmin']),
+            'reason' => 'Promotion explicite par opérateur via CLI', 'created_at' => now()]);
+        $locked->role = 'superadmin';
+        $locked->auth_version++;
+        $locked->remember_token = \Illuminate\Support\Str::random(60);
+        $locked->save();
+    }, 3);
+    $this->info('Superadmin attribué. Une nouvelle connexion est requise.');
+});

@@ -19,8 +19,8 @@ class PlatformController extends Controller
             $data['stats'] = ['volume' => (int) DB::table('positions')->sum('stake'), 'open_markets' => DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->count()];
             $data['markets'] = DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->orderBy('closes_at')->paginate(3);
         }
-        if ($page === 'dashboard' && $user->role === 'admin') {
-            return redirect('/admin');
+        if ($page === 'dashboard' && $user->isAdministrator()) {
+            return redirect($user->isSuperadmin() ? '/superadmin' : '/admin');
         }
         if ($page === 'dashboard') {
             $positions = DB::table('positions')->where('user_id', $user->id);
@@ -92,10 +92,12 @@ class PlatformController extends Controller
                 ->select('positions.*', 'markets.title', 'markets.closes_at', 'markets.result', 'fx_quotes.rate as fx_rate', 'fx_quotes.as_of as fx_as_of')->orderByDesc('positions.id')->paginate(20)->withQueryString();
         }
         if ($page === 'wallet') {
+            $paymentSettings = app(\App\Modules\Infrastructure\Settings::class)->current();
             $currency = DB::table('payment_wallets')->where('user_id', $user->id)->value('currency') ?? 'XAF';
             $data['ndsgpay'] = [
-                'enabled' => app(\App\Modules\Payments\Ndsgpay::class)->ready(),
-                'min_amount' => (string) config('payments.min_amount'), 'max_amount' => (string) config('payments.max_amount'),
+                'enabled' => app(\App\Modules\Payments\Ndsgpay::class)->ready() && app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(),
+                'maintenance_message' => $paymentSettings['maintenance_message'],
+                'min_amount' => $paymentSettings['min_amount'], 'max_amount' => $paymentSettings['max_amount'],
                 'scale' => \App\Modules\Money\Money::scale($currency),
                 'currency' => $currency,
                 'correspondents' => array_column(app(\App\Modules\Payments\Capabilities::class)->forAccount($user), 'correspondent'),
@@ -123,15 +125,15 @@ class PlatformController extends Controller
                 ->orderByDesc('id')->paginate(20)->withQueryString();
         }
         if ($page === 'support') {
-            $data['tickets'] = DB::table('support_tickets')->when($user->role !== 'admin', fn ($q) => $q->where('user_id', $user->id))->orderByDesc('updated_at')->paginate(20);
+            $data['tickets'] = DB::table('support_tickets')->when(! $user->isAdministrator(), fn ($q) => $q->where('user_id', $user->id))->orderByDesc('updated_at')->paginate(20);
         }
         if ($page === 'ticket') {
             $ticket = DB::table('support_tickets')->where('id', $id)->first();
             abort_unless($ticket, 404);
             Gate::authorize('access-ticket', $ticket);
             $data['ticket'] = $ticket;
-            $data['tickets'] = DB::table('support_tickets')->when($user->role !== 'admin', fn ($q) => $q->where('user_id', $user->id))->orderByDesc('updated_at')->paginate(20);
-            if ($user->role === 'admin') $data['customer'] = DB::table('users')->select('name', 'email', 'role', 'created_at')->where('id', $ticket->user_id)->first();
+            $data['tickets'] = DB::table('support_tickets')->when(! $user->isAdministrator(), fn ($q) => $q->where('user_id', $user->id))->orderByDesc('updated_at')->paginate(20);
+            if ($user->isAdministrator()) $data['customer'] = DB::table('users')->select('name', 'email', 'role', 'created_at')->where('id', $ticket->user_id)->first();
             $data['messages'] = DB::table('support_messages')->join('users', 'users.id', '=', 'support_messages.user_id')->where('ticket_id', $id)
                 ->select('support_messages.*', 'users.name', 'users.role')->orderBy('support_messages.id')->paginate(30);
         }

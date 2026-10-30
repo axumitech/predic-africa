@@ -14,7 +14,7 @@ class MarketWorkflow
     {
         return DB::transaction(function () use ($creatorId, $input, $pipelineSource) {
             $user = User::whereKey($creatorId)->lockForUpdate()->firstOrFail();
-            abort_unless(! $user->suspended && in_array($user->role, ['trader', 'admin'], true), 403);
+            abort_unless(! $user->suspended && in_array($user->role, ['trader', 'admin', 'superadmin'], true), 403);
             if ($pipelineSource !== null) {
                 Gate::forUser($user)->authorize('admin');
             }

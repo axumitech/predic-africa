@@ -8,7 +8,7 @@ class PaymentPolicy
 {
     public function deposit(User $user): bool
     {
-        return ! $user->suspended && in_array($user->role, ['trader', 'admin'], true);
+        return ! $user->suspended && in_array($user->role, ['trader', 'admin', 'superadmin'], true);
     }
 
     public function view(User $user, object $payment): bool
@@ -24,6 +24,6 @@ class PaymentPolicy
 
     public function operate(User $user): bool
     {
-        return ! $user->suspended && $user->role === 'admin';
+        return ! $user->suspended && $user->isAdministrator();
     }
 }

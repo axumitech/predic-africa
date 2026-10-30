@@ -12,6 +12,7 @@ export type NdsgpayWalletData = {
     min_amount: string;
     max_amount: string;
     correspondents: string[];
+    maintenance_message?: string;
     correspondent_labels?: Record<string, string>;
     payments: { id: number; reference: string; kind: string; amount: Minor; currency: string; status: string; local_state: string; created_at: string }[];
 };

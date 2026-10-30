@@ -4,17 +4,18 @@ import '../../css/app.css';
 import '../features/platform/login.css';
 import '../features/platform/register.css';
 
-type Field = 'name' | 'email' | 'password' | 'password_confirmation';
+type Field = 'name' | 'email' | 'phone' | 'password' | 'password_confirmation';
 type RegistrationField = Field | 'country' | 'currency';
-type CountryOption = { code: string; name: string; currencies: { code: string; name: string }[] };
+type CountryOption = { code: string; name: string; phone: { calling_code: string; length: number; example: string }; currencies: { code: string; name: string }[] };
 const fields: { key: Field; label: string; placeholder: string; autoComplete: string; maxLength?: number }[] = [
     { key: 'name', label: 'Nom complet', placeholder: 'Votre nom et prénom', autoComplete: 'name', maxLength: 100 },
     { key: 'email', label: 'Adresse e-mail', placeholder: 'vous@exemple.com', autoComplete: 'email', maxLength: 255 },
+    { key: 'phone', label: 'Numéro de téléphone', placeholder: 'Votre numéro', autoComplete: 'tel-national', maxLength: 32 },
     { key: 'password', label: 'Mot de passe', placeholder: 'Au moins 10 caractères', autoComplete: 'new-password' },
     { key: 'password_confirmation', label: 'Confirmer le mot de passe', placeholder: 'Saisissez-le à nouveau', autoComplete: 'new-password' },
 ];
 export default function Register({ countries }: { countries: CountryOption[] }) {
-    const form = useForm({ country: '', currency: '', name: '', email: '', password: '', password_confirmation: '' });
+    const form = useForm({ country: '', currency: '', name: '', email: '', phone: '', password: '', password_confirmation: '' });
     const inputs = useRef<Partial<Record<RegistrationField, HTMLInputElement | HTMLSelectElement | null>>>({});
     const country = countries.find(option => option.code === form.data.country);
     const [visible, setVisible] = useState(false);
@@ -61,8 +62,8 @@ export default function Register({ countries }: { countries: CountryOption[] }) 
                             <div className="pa-login-field">
                                 <label htmlFor="pa-register-country">Pays de résidence</label>
                                 <select ref={element => { inputs.current.country = element; }} id="pa-register-country" name="country" autoComplete="country" required value={form.data.country} onChange={event => {
-                                    form.setData(data => ({ ...data, country: event.target.value, currency: '' }));
-                                    form.clearErrors('country', 'currency');
+                                    form.setData(data => ({ ...data, country: event.target.value, currency: '', phone: '' }));
+                                    form.clearErrors('country', 'currency', 'phone');
                                 }} aria-invalid={!!form.errors.country} aria-describedby={form.errors.country ? 'pa-register-country-error' : undefined}>
                                     <option value="" disabled>Choisir mon pays</option>
                                     {countries.map(option => <option key={option.code} value={option.code}>{option.name}</option>)}
@@ -90,7 +91,11 @@ export default function Register({ countries }: { countries: CountryOption[] }) 
                         const hint = key === 'password' ? 'pa-register-password-hint' : undefined;
                         return <div className="pa-login-field" key={key}>
                             <div className="pa-register-label"><label htmlFor={`pa-register-${key}`}>{label}</label>{key === 'password' && <button type="button" aria-pressed={visible} onClick={() => setVisible(!visible)}>{visible ? 'Masquer' : 'Afficher'}<span className="pa-register-sr"> les mots de passe</span></button>}</div>
-                            <input ref={element => { inputs.current[key] = element; }} id={`pa-register-${key}`} name={key} type={secret ? (visible ? 'text' : 'password') : key === 'email' ? 'email' : 'text'} autoComplete={autoComplete} autoCapitalize={key === 'name' ? 'words' : 'none'} spellCheck={false} required minLength={secret ? 10 : undefined} maxLength={maxLength} placeholder={placeholder} value={form.data[key]} onChange={e => { form.setData(key, e.target.value); form.clearErrors(key); }} aria-invalid={!!form.errors[key]} aria-describedby={[hint, form.errors[key] ? `pa-register-${key}-error` : undefined].filter(Boolean).join(' ') || undefined}/>
+                            <div className={key === 'phone' ? 'pa-register-phone' : undefined}>
+                            {key === 'phone' && <span className="pa-register-phone-prefix" aria-hidden="true">{country ? `+${country.phone.calling_code}` : '+—'}</span>}
+                            <input ref={element => { inputs.current[key] = element; }} id={`pa-register-${key}`} name={key} type={secret ? (visible ? 'text' : 'password') : key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'} autoComplete={autoComplete} autoCapitalize={key === 'name' ? 'words' : 'none'} spellCheck={false} required minLength={secret ? 10 : undefined} maxLength={maxLength} disabled={key === 'phone' && !country} placeholder={key === 'phone' ? country?.phone.example ?? 'Choisissez votre pays' : placeholder} value={form.data[key]} onChange={e => { form.setData(key, e.target.value); form.clearErrors(key); }} aria-invalid={!!form.errors[key]} aria-describedby={[key === 'phone' ? 'pa-register-phone-hint' : hint, form.errors[key] ? `pa-register-${key}-error` : undefined].filter(Boolean).join(' ') || undefined}/>
+                            </div>
+                            {key === 'phone' && <small id="pa-register-phone-hint" className="pa-register-hint">{country ? `${country.name} · Indicatif +${country.phone.calling_code}. Saisissez votre numéro national ou collez le numéro international complet.` : 'Le pays sélectionné détermine votre indicatif téléphonique.'}</small>}
                             {key === 'password' && <small id={hint} className="pa-register-hint">Utilisez au moins 10 caractères.</small>}{key === 'password' && form.data.password && <div className="pa-password-strength" role="status"><meter min={0} max={4} value={strength} aria-label="Robustesse indicative du mot de passe"/><small>{['Trop court', 'À renforcer', 'Correct', 'Bon', 'Robuste'][strength]} · Indication locale, non transmise</small></div>}
                             {key === 'password_confirmation' && matches && <small className="pa-register-match" role="status">✓ Les mots de passe correspondent.</small>}
                             {form.errors[key] && <p id={`pa-register-${key}-error`} className="pa-login-error" role="alert">{form.errors[key]}</p>}

@@ -20,7 +20,7 @@ class ActiveAccount
                 throw new AuthenticationException;
             }
             Auth::setUser($user);
-            if ($user->suspended || ! in_array($user->role, ['trader', 'admin'], true)) {
+            if ($user->suspended || ! in_array($user->role, ['trader', 'admin', 'superadmin'], true)) {
                 SessionAccess::revokeCurrent($request);
                 abort(403, 'Accès suspendu ou rôle non autorisé. Contactez le support.');
             }
