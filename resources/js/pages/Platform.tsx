@@ -13,6 +13,8 @@ import MarketExplorer from '../features/platform/MarketExplorer';
 import { Positions, Transactions, type Position, type Transaction } from '../features/platform/Records';
 import { Button, Modal, ConfirmationModal, StatCard, DataTable, Badge } from '../components/ui';
 import PublicInfo from '../features/platform/PublicInfo';
+import NotificationPreferences from '../features/platform/NotificationPreferences';
+import Profile, { type ProfileDetails } from '../features/platform/Profile';
 import Dashboard from '../features/platform/Dashboard';
 type Ticket = {
     id: number;
@@ -52,6 +54,7 @@ type Props = {
     tickets?: Pagination<Ticket>;
     ticket?: Ticket;
     messages?: Pagination<Message>;
+    notificationsEnabled?: boolean;
     notifications?: Pagination<Notification>;
     users?: Pagination<Account & {
         suspended: boolean;
@@ -62,6 +65,7 @@ type Props = {
     stats?: Record<string, number>;
     activity?: {label:string;value:number}[];
     ndsgpay?: NdsgpayWalletData;
+    profileDetails?: ProfileDetails;
     walletStats?: Record<string, number>;
     customer?: {name:string;email:string;role:string;created_at:string};
     recentActivity?: { id: number; kind: string; amount: number; created_at: string; currency?: string }[];
@@ -102,9 +106,8 @@ function Content(props: Props) {
     if (page === 'ticket' && props.ticket)
         return <div className="p-support-layout"><aside className="p-panel p-support-list"><h2>Conversations</h2>{props.tickets?.data.map(t=><Link key={t.id} href={`/support/${t.id}`} aria-current={t.id===props.ticket?.id?'page':undefined}>#{t.id} · {t.subject}<small>{date(t.updated_at)}</small><Status value={t.status}/></Link>)}</aside><Panel title={`#${props.ticket.id} · ${props.ticket.subject}`}><Link className="p-text-link" href="/support">← Tous les tickets</Link><div className="p-conversation">{props.messages?.data.map(m => <article className={`p-message ${['admin', 'superadmin'].includes(m.role) ? 'p-message-admin' : ''}`} key={m.id}><div className="p-row"><strong>{m.name}{['admin', 'superadmin'].includes(m.role) && ' · Support'}</strong><small>{date(m.created_at)}</small></div><p>{m.body}</p></article>)}</div><Pager result={props.messages}/><Status value={props.ticket.status}/><ActionForm action={`/support/${props.ticket.id}`} initial={{ body: '', status: props.ticket.status }} fields={[{ name: 'body', label: 'Votre réponse', type: 'textarea' }, { name: 'status', label: 'État après envoi', options: [{ value: 'open', label: 'Ouvert' }, { value: 'closed', label: 'Fermé' }] }]} submit="Envoyer la réponse"/></Panel><aside className="p-panel p-support-customer"><h2>{props.customer ? 'Informations du client' : 'Votre demande'}</h2>{props.customer&&<><strong>{props.customer.name}</strong><p>{props.customer.email}</p><small>Inscription : {date(props.customer.created_at)}</small></>}<p>Ticket #{props.ticket.id}</p><Status value={props.ticket.status}/><p>Vous pouvez fermer ou rouvrir cette conversation lors de votre réponse.</p></aside></div>;
     if (page === 'notifications')
-        return <Panel title="L’activité de votre compte" className="p-notifications"><ActionForm action="/notifications/read" initial={{}} fields={[]} disabled={props.unread === 0} submit={props.unread === 0 ? "Tout est lu" : "Tout marquer comme lu"}/>{!props.notifications?.data.length ? <Empty>Vous êtes à jour. Vos prochaines opérations apparaîtront ici.</Empty> : props.notifications.data.map(n => <div className={`p-list-item ${!n.read_at ? 'p-unread' : ''}`} key={n.id}><div><strong>{n.message}</strong><small>{date(n.created_at)}</small></div><Badge tone={n.read_at ? 'neutral' : 'info'}>{n.read_at ? 'Lue' : 'Nouvelle'}</Badge></div>)}<Pager result={props.notifications}/></Panel>;
-    if (page === 'profile' && auth)
-        return <div className="p-profile-layout"><Panel title="Informations personnelles"><p>Gardez vos coordonnées à jour et protégez l’accès à votre compte.</p><dl className="p-confirm-summary"><div><dt>Pays de résidence</dt><dd>{auth.country_name || 'Non renseigné'}</dd></div><div><dt>Devise du portefeuille</dt><dd>{walletCurrency}</dd></div></dl><ActionForm action="/profile" initial={{ name: auth.name, email: auth.email, current_password: '', password: '', password_confirmation: '' }} fields={[{ name: 'name', label: 'Nom complet', maxLength: 100 }, { name: 'email', label: 'Adresse e-mail', type: 'email' }, { name: 'current_password', label: 'Mot de passe actuel', type: 'password', hint: 'Nécessaire pour confirmer toute modification de votre profil.' }, { name: 'password', label: 'Nouveau mot de passe (facultatif)', type: 'password', required: false, minLength: 10 }, { name: 'password_confirmation', label: 'Confirmer le nouveau mot de passe', type: 'password', required: false }]} submit="Enregistrer mon profil"/></Panel><aside className="p-panel p-profile-note"><span className="p-eyebrow">VOTRE COMPTE</span><div className="p-profile-avatar" aria-hidden="true">{auth.name.slice(0, 1).toUpperCase()}</div><h2>{auth.name}</h2><p>{auth.email}</p><Badge>{['admin', 'superadmin'].includes(auth.role) ? 'Administrateur' : 'Compte trader'}</Badge><hr/><h3>Un accès personnel</h3><p>Utilisez un mot de passe unique d’au moins dix caractères. Ne partagez jamais vos identifiants ni votre code Mobile Money.</p><Link href="/support">Besoin d’aide ? →</Link></aside></div>;
+        return <div className="p-stack"><NotificationPreferences enabled={props.notificationsEnabled ?? true}/><Panel title="L’activité de votre compte" className="p-notifications"><ActionForm action="/notifications/read" initial={{}} fields={[]} disabled={props.unread === 0} submit={props.unread === 0 ? "Tout est lu" : "Tout marquer comme lu"}/>{!props.notifications?.data.length ? <Empty>Vous êtes à jour. Les notifications reçues apparaissent ici.</Empty> : props.notifications.data.map(n => <div className={`p-list-item ${!n.read_at ? 'p-unread' : ''}`} key={n.id}><div><strong>{n.message}</strong><small>{date(n.created_at)}</small></div><Badge tone={n.read_at ? 'neutral' : 'info'}>{n.read_at ? 'Lue' : 'Nouvelle'}</Badge></div>)}<Pager result={props.notifications}/></Panel></div>;
+    if (page === 'profile' && auth) return <Profile auth={auth} details={props.profileDetails}/>;
     if (page === 'admin-users')
         return <Panel title="Accès à la plateforme"><p>La suspension bloque les pages privées et les nouvelles opérations. Les droits administrateur sont attribués par la commande serveur.</p><DataTable caption="Utilisateurs et accès" rows={props.users?.data || []} rowKey={u => u.id} columns={[
             { key: 'name', label: 'Utilisateur', render: u => <strong>{u.name}</strong> },

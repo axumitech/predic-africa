@@ -17,11 +17,8 @@ class Outbox
                 return;
             }
             $payment = DB::table('payments')->find($event->payment_id);
-            DB::table('platform_notifications')->insert([
-                'user_id' => $payment->user_id,
-                'message' => 'NDSGPay · '.$payment->reference.' · '.$event->event.' · '.Money::decimal((int) $payment->amount, $payment->currency).' '.$payment->currency,
-                'created_at' => now(),
-            ]);
+            \App\Modules\Notifications\Notifier::send($payment->user_id,
+                'NDSGPay · '.$payment->reference.' · '.$event->event.' · '.Money::decimal((int) $payment->amount, $payment->currency).' '.$payment->currency);
             DB::table('payment_outbox')->where('id', $id)->update(['delivered_at' => now()]);
         }, 3);
     }

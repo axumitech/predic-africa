@@ -13,7 +13,7 @@ if (! app()->environment('testing') || config('database.default') !== 'sqlite'
     || ! str_contains(config('database.connections.sqlite.database'), 'predic-e2e-fx-transfers-') || app()->configurationIsCached()) {
     throw new RuntimeException('An isolated transfer testing database is required.');
 }
-$user = User::factory()->create(['email' => 'transfers@example.test', 'password' => 'transfer-password-123', 'country' => 'GAB']);
+$user = User::factory()->create(['email' => 'transfers@example.test', 'password' => 'transfer-password-123', 'country' => null, 'phone' => '+24177000000']);
 DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 5000, true));
 // Regression: a historical ledger account can exist before its wallet.
 DB::table('accounts')->insert(['user_id' => $user->id, 'code' => "historical-cdf:$user->id", 'currency' => 'CDF', 'balance' => 0]);

@@ -58,6 +58,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'suspended' => 'boolean',
+            'notifications_enabled' => 'boolean',
             'auth_version' => 'integer',
             'password' => 'hashed',
         ];

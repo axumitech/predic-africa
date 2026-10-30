@@ -90,3 +90,17 @@ les appels prestataire non simulés. Les captures de l’inscription se trouvent
 téléphone obligatoire, la remise à zéro lors d'un changement de pays, les erreurs
 serveur et une inscription CDF avec téléphone national. Captures mobile et bureau :
 `/private/tmp/predicafrica-registration-phone-{390,1440}.png`.
+
+## Préférences du profil
+
+Le profil permet de compléter le pays de résidence uniquement lorsqu’il est absent.
+Un pays déjà enregistré ne peut pas être modifié via cette action. Cette saisie ne
+convertit ni ne recrée les portefeuilles. Le numéro enregistré est affiché en lecture
+seule dans les données spécifiques au profil, sans être ajouté aux propriétés
+partagées de toutes les pages.
+
+Avec plusieurs portefeuilles, l’utilisateur peut choisir un portefeuille par défaut.
+La préférence est validée parmi ses propres portefeuilles et requiert le mot de
+passe actuel, comme les autres changements de profil. Elle est appliquée lors de la
+prochaine connexion ; les changements temporaires depuis le header ne la modifient
+pas. En l’absence de préférence explicite, le premier portefeuille est utilisé.

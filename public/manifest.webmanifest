@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "PredicAfrica",
+  "short_name": "PredicAfrica",
+  "description": "Vos marchés de prédictions et vos portefeuilles, réunis dans PredicAfrica.",
+  "lang": "fr",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#081326",
+  "theme_color": "#081326",
+  "icons": [
+    { "src": "/icons/predicafrica-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/predicafrica-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/predicafrica-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

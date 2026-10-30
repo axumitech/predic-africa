@@ -56,6 +56,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/markets/{id}/positions', [TradingController::class, 'store'])->whereNumber('id');
         Route::post('/support', [SupportController::class, 'store']);
         Route::post('/support/{id}', [SupportController::class, 'reply'])->whereNumber('id');
+        Route::post('/notifications/preferences', [PlatformController::class, 'notificationPreferences']);
         Route::post('/notifications/read', [PlatformController::class, 'readNotifications']);
         Route::post('/profile', [IdentityController::class, 'profile']);
         Route::post('/admin/markets/{id}/moderate', [MarketController::class, 'moderate'])->whereNumber('id');

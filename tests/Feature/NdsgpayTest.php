@@ -73,6 +73,22 @@ class NdsgpayTest extends TestCase
         }
     }
 
+    public function test_queued_payment_notification_respects_opt_out_and_is_not_replayed(): void
+    {
+        $this->fakeProvider();
+        $payment = $this->create();
+        app(Payments::class)->refresh($payment);
+        $event = DB::table('payment_outbox')->sole();
+        DB::table('users')->where('id', $payment->user_id)->update(['notifications_enabled' => false]);
+        app(Outbox::class)->deliver($event->id);
+        $this->assertDatabaseCount('platform_notifications', 0);
+        $this->assertNotNull(DB::table('payment_outbox')->where('id', $event->id)->value('delivered_at'));
+        DB::table('users')->where('id', $payment->user_id)->update(['notifications_enabled' => true]);
+        app(Outbox::class)->deliver($event->id);
+        $this->assertDatabaseCount('platform_notifications', 0);
+        $this->assertDatabaseHas('payment_wallets', ['user_id' => $payment->user_id, 'balance' => 1000]);
+    }
+
     public function test_creation_is_not_payment_and_browser_cannot_override_owner_or_currency(): void
     {
         $this->fakeProvider();

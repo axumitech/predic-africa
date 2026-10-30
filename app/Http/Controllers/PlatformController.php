@@ -16,6 +16,13 @@ class PlatformController extends Controller
         $user = $request->user();
         $data = [];
         $activeCurrency = $user ? \App\Modules\Money\Wallets::currency($user->id) : 'XAF';
+        if ($page === 'profile') {
+            $data['profileDetails'] = [
+                'phone' => $user->phone,
+                'default_wallet_currency' => \App\Modules\Money\Wallets::defaultCurrency($user->id),
+                'countries' => app(\App\Modules\Identity\RegistrationRegions::class)->options(),
+            ];
+        }
         if ($page === 'home') {
             $data['stats'] = ['volume' => (int) DB::table('positions')->sum('stake'), 'open_markets' => DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->count()];
             $data['markets'] = DB::table('markets')->where('status', 'open')->where('closes_at', '>', now())->orderBy('closes_at')->paginate(3);
@@ -139,6 +146,7 @@ class PlatformController extends Controller
                 ->select('support_messages.*', 'users.name', 'users.role')->orderBy('support_messages.id')->paginate(30);
         }
         if ($page === 'notifications') {
+            $data['notificationsEnabled'] = (bool) $user->notifications_enabled;
             $data['notifications'] = DB::table('platform_notifications')->where('user_id', $user->id)->orderByDesc('id')->paginate(30);
         }
         if ($page === 'admin-users') {
@@ -188,6 +196,15 @@ class PlatformController extends Controller
         }
 
         return Inertia::render('Platform', ['page' => $page, ...$data]);
+    }
+
+    public function notificationPreferences(Request $request)
+    {
+        $data = $request->validate(['notifications_enabled' => 'required|boolean']);
+        $request->user()->notifications_enabled = (bool) $data['notifications_enabled'];
+        $request->user()->save();
+
+        return back()->with('success', $data['notifications_enabled'] ? 'Notifications activées.' : 'Notifications désactivées.');
     }
 
     public function readNotifications(Request $request)

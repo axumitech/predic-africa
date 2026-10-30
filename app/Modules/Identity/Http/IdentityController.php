@@ -70,6 +70,11 @@ class IdentityController extends Controller
             throw ValidationException::withMessages(['email' => 'Identifiants incorrects ou compte suspendu.']);
         }
         $request->session()->regenerate();
+        DB::transaction(function () {
+            $id = Auth::id();
+            DB::table('users')->where('id', $id)->lockForUpdate()->firstOrFail();
+            DB::table('users')->where('id', $id)->update(['active_wallet_currency' => \App\Modules\Money\Wallets::defaultCurrency($id)]);
+        });
 
         SessionAccess::establish($request, Auth::user());
 
@@ -94,6 +99,8 @@ class IdentityController extends Controller
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'current_password' => 'required|string',
             'password' => ['nullable', 'confirmed', Password::min(10)],
+            ...($user->country === null ? ['country' => ['nullable', 'string', Rule::in(array_keys(config('regions.countries')))]] : []),
+            'default_wallet_currency' => ['nullable', 'string', 'size:3', Rule::exists('payment_wallets', 'currency')->where('user_id', $user->id)],
         ]);
         try {
             $user = DB::transaction(function () use ($user, $data) {
@@ -101,6 +108,16 @@ class IdentityController extends Controller
                 abort_if($locked->suspended, 403, 'Compte suspendu.');
                 if (! Hash::check($data['current_password'], $locked->password)) {
                     throw ValidationException::withMessages(['current_password' => 'Le mot de passe actuel est incorrect.']);
+                }
+                if ($locked->country === null && ! empty($data['country'])) {
+                    $locked->country = $data['country'];
+                }
+                if (! empty($data['default_wallet_currency'])) {
+                    // Recheck ownership under the same user lock as wallet writers.
+                    if (! DB::table('payment_wallets')->where('user_id', $locked->id)->where('currency', $data['default_wallet_currency'])->exists()) {
+                        throw ValidationException::withMessages(['default_wallet_currency' => 'Choisissez un de vos portefeuilles.']);
+                    }
+                    $locked->default_wallet_currency = $data['default_wallet_currency'];
                 }
                 $locked->name = $data['name'];
                 if ($locked->email !== $data['email']) {
