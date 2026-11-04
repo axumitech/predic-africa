@@ -2,86 +2,65 @@ import PwaInstall from '../../components/PwaInstall';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { LanguageSelect, useLocale } from '../../content/locale';
-import { faq, product } from '../../content/product';
-import { Drawer } from '../../components/ui';
-import { useEffect } from 'react';
-import { money, type Market, type Pagination } from './ui';
+import { faq } from '../../content/product';
+import { money, categories, type Market, type Pagination } from './ui';
 import '../../../css/app.css';
 import '../../../css/official-landing.css';
 
+const symbols: Record<string, string> = { Sport: '◉', Politique: '⚑', Musique: '♫', Économie: '↗', Crypto: '₿', Société: '◎' };
 export default function Landing({ authenticated, markets, stats = {} }: { authenticated: boolean; markets?: Pagination<Market>; stats?: Record<string, number> }) {
     const { locale } = useLocale();
-    const fr = locale === 'fr';
-    const text = (a: string, b: string) => fr ? a : b;
-    const access = authenticated ? '/dashboard' : '/login';
-    const [menu, setMenu] = useState(false);
-    useEffect(() => {
-        const desktop = window.matchMedia('(min-width: 1024px)');
-        const close = () => { if (desktop.matches) setMenu(false); };
-        desktop.addEventListener('change', close);
-        return () => desktop.removeEventListener('change', close);
-    }, []);
+    const text = (fr: string, en: string) => locale === 'fr' ? fr : en;
+    const [category, setCategory] = useState('');
+    const [query, setQuery] = useState('');
     const [stake, setStake] = useState('1000');
     const [selected, setSelected] = useState('');
-    const market = markets?.data.find(m => String(m.id) === selected) || markets?.data[0];
+    const data = markets?.data || [];
+    const filtered = data.filter(m => (!category || m.category === category) && m.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+    const featured = data[0];
+    const market = data.find(m => String(m.id) === selected) || featured;
     const amount = /^\d+$/.test(stake) ? Math.min(1000000, Number(stake)) : 0;
-    const payout = market ? Math.floor(amount * market.yes_odds / 100) : 0;
-    const facts = product.facts[locale];
-    const preview = markets?.data.slice(0, 2) || [];
-    return <div id="official-landing" className="official-landing">
-        <Head title={text('La Bourse de Prédictions en Afrique', 'Prediction markets in Africa')} />
-        <a className="official-skip" href="#main-content">{text('Aller au contenu', 'Skip to content')}</a>
-        <header className="landing-header">
-            <Link className="landing-header__brand" href="/" aria-label="PredicAfrica"><img width="1460" height="481" src="/HOR_WG.png" alt="PredicAfrica" className="brand-img" /></Link>
-            <nav className="landing-nav" aria-label={text('Navigation principale', 'Main navigation')}>
-                <a href="#how-it-works" className="landing-nav__link" onClick={() => setMenu(false)}>{text('Comment négocier', 'How it works')}</a>
-                <a href="#landing-markets" className="landing-nav__link" onClick={() => setMenu(false)}>{text('Marchés', 'Markets')}</a>
-                <a href="#faq" className="landing-nav__link" onClick={() => setMenu(false)}>FAQ</a>
-                <a href="#contact" className="landing-nav__link" onClick={() => setMenu(false)}>Support</a>
-            </nav>
-            <LanguageSelect />
-            <Link className="btn btn--primary" id="btn-enter-bourse" href={access}>{text('Accéder à la Bourse', 'Open my workspace')}</Link>
-            <button className="official-menu" type="button" aria-controls="landing-mobile-navigation" aria-haspopup="dialog" aria-expanded={menu} aria-label={text('Ouvrir le menu', 'Open menu')} onClick={() => setMenu(!menu)}>☰</button>
-        </header>
-        <Drawer id="landing-mobile-navigation" title={text('Navigation', 'Navigation')} open={menu} onClose={() => setMenu(false)}>
-            <nav className="official-mobile-links" aria-label={text('Navigation mobile', 'Mobile navigation')}>
-                {[['#how-it-works', text('Comment négocier', 'How it works')], ['#landing-markets', text('Marchés', 'Markets')], ['#faq', 'FAQ'], ['#contact', 'Support']].map(([href, label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}
-                <Link href={access} onClick={() => setMenu(false)}>{text('Mon espace', 'My workspace')}<span aria-hidden="true">→</span></Link>
-            </nav>
-        </Drawer>
+    const start = authenticated ? '/markets' : '/register';
+    return <div id="official-landing" className="pa-landing">
+        <Head title={text('L’Afrique a de l’avenir. Vous avez une conviction.', 'Africa has a future. You have a conviction.')} />
+        <a className="pa-skip" href="#main-content">{text('Aller au contenu', 'Skip to content')}</a>
+        <header className="pa-header"><div className="pa-header-inner">
+            <Link href="/" className="pa-brand" aria-label="PredicAfrica"><span className="pa-brand-mark" aria-hidden="true">p<span>↗</span></span>predic<span>africa</span><i>®</i></Link>
+            <nav aria-label={text('Navigation principale', 'Main navigation')}><a className="pa-nav-active" href="#landing-markets">{text('Marchés', 'Markets')}</a><a href="#how-it-works">{text('Comment ça marche', 'How it works')}</a><a href="#faq">FAQ</a></nav>
+            <div className="pa-header-actions"><LanguageSelect /><Link className="pa-login" href={authenticated ? '/dashboard' : '/login'}>{text(authenticated ? 'Mon espace' : 'Connexion', authenticated ? 'My workspace' : 'Log in')}</Link><Link className="pa-button pa-button-small" href={start}>{text('Commencer', 'Get started')} <span>↗</span></Link></div>
+        </div></header>
         <main id="main-content" tabIndex={-1}>
-            <div className="landing-hero-wrapper"><section className="landing-hero">
-                <div className="landing-hero__content"><span className="hero-badge">{text('Vos convictions prennent position', 'Put your convictions into play')}</span>
-                    <h1 className="hero-title">{text('La première Bourse de Prédictions en Afrique', 'Africa’s prediction marketplace')}</h1>
-                    <p className="hero-desc">{text('Politique, sport, musique et économie : explorez les questions qui font bouger le continent. Choisissez Oui ou Non et suivez vos positions à cote fixe.', 'Politics, sport, music and the economy: explore the questions shaping the continent. Choose Yes or No and follow your fixed-odds positions.')}</p>
-                    <div className="hero-actions"><Link className="btn btn--primary btn--lg" id="btn-hero-start" href={authenticated ? '/markets' : '/register'}>{text('Commencer à négocier', 'Get started')} →</Link><a className="btn btn--lg hero-explore" href="#landing-markets">{text('Explorer les marchés', 'Explore markets')} ↗</a></div>
-                    <div className="hero-metrics">
-                        <div className="hero-metric"><span className="metric-val">{money(stats.volume || 0)} XAF</span><span className="metric-lbl">{text('Volume échangé', 'Traded volume')}</span></div>
-                        <div className="hero-metric"><span className="metric-val">{stats.open_markets || 0}</span><span className="metric-lbl">{text('Marchés ouverts', 'Open markets')}</span></div>
-                        <div className="hero-metric"><span className="metric-val">XAF</span><span className="metric-lbl">{text('Devise du portefeuille', 'Wallet currency')}</span></div>
-                    </div>
+            <section className="pa-hero pa-container">
+                <div className="pa-hero-copy"><div className="pa-eyebrow"><span className="pa-dot" />{text('LE CONTINENT BOUGE. PRENEZ POSITION.', 'THE CONTINENT IS MOVING. TAKE A POSITION.')}</div>
+                    <h1>{text('L’Afrique a', 'Africa has')}<br />{text('de l’avenir.', 'a future.')}<br /><span>{text('Vous avez du flair.', 'You see it coming.')}</span></h1>
+                    <p>{text('Les grandes questions du continent. Vos convictions. Un marché pour leur donner de la valeur.', 'The continent’s biggest questions. Your convictions. A marketplace to put them into play.')}</p>
+                    <div className="pa-hero-actions"><Link id="btn-hero-start" className="pa-button" href={start}>{text('Prendre position', 'Take a position')} <span>↗</span></Link><a href="#landing-markets" className="pa-text-link">{text('Explorer les marchés', 'Explore markets')} <span>→</span></a></div>
+                    <div className="pa-hero-note"><span>◎</span>{text('Des cotes fixes. Des règles claires. Votre décision.', 'Fixed odds. Clear rules. Your decision.')}</div>
                 </div>
-                <div className="landing-hero__visual">
-                    {preview.length ? preview.map((m, i) => <article className={`mock-card mock-card--${i + 1}`} key={m.id}>
-                        <span className="mock-tag mock-tag--politics">{m.category}</span><h3><Link href={`/markets/${m.id}`}>{m.title}</Link></h3>
-                        <div className="mock-odds"><span>{text('Oui', 'Yes')} @ {(m.yes_odds / 100).toFixed(2)}</span><span>{text('Non', 'No')} @ {(m.no_odds / 100).toFixed(2)}</span></div>
-                    </article>) : <><article className="mock-card mock-card--1"><span className="mock-tag mock-tag--politics">PredicAfrica</span><h3>{text('Votre prochaine conviction commence ici.', 'Your next conviction starts here.')}</h3><div className="mock-odds"><span>{text('Oui', 'Yes')}</span><span>{text('Non', 'No')}</span></div></article><article className="mock-card mock-card--2"><span className="mock-tag mock-tag--music">{text('Des règles claires', 'Clear rules')}</span><h3>{text('Une question. Deux possibilités.', 'One question. Two possibilities.')}</h3><p>{text('Les marchés publiés apparaîtront ici.', 'Published markets will appear here.')}</p></article></>}
+                <div className="pa-hero-art"><div className="pa-art-grid" /><div className="pa-orbit pa-orbit-one" /><div className="pa-orbit pa-orbit-two" /><span className="pa-art-caption">AFRICA’S NEXT CHAPTER</span>
+                    <div className="pa-continent" aria-hidden="true"><svg viewBox="0 0 400 440"><path d="M92 54 153 34 199 41 217 62 257 69 274 102 301 115 315 146 352 163 327 197 302 207 290 247 271 263 260 312 232 359 211 396 184 381 170 345 152 314 153 278 136 247 111 236 81 211 56 194 43 161 50 125 67 109 70 79Z"/><path d="m312 295 13-21 7 18-7 41-15 18-6-17Z"/></svg></div>
+                    <article className="pa-feature-market"><div className="pa-card-top"><span className="pa-tag">{featured?.category || 'PredicAfrica'}</span><span className="pa-live"><span className="pa-dot" />{text(featured ? 'Marché ouvert' : 'Le principe', featured ? 'Open market' : 'How it works')}</span></div>
+                        <h2>{featured?.title || text('Et si votre prochaine conviction faisait la différence ?', 'What if your next conviction made a difference?')}</h2>
+                        <div className="pa-feature-divider" /><div className="pa-feature-label">{text(featured ? 'À VOUS DE PRENDRE POSITION' : 'UNE QUESTION. DEUX POSSIBILITÉS.', featured ? 'MAKE YOUR CALL' : 'ONE QUESTION. TWO POSSIBILITIES.')}</div>
+                        <div className="pa-outcomes"><Link href={featured ? `/markets/${featured.id}` : start}><span>{text('Oui', 'Yes')} ↗</span><strong>{featured ? `×${(featured.yes_odds / 100).toFixed(2)}` : '✓'}</strong></Link><Link href={featured ? `/markets/${featured.id}` : start}><span>{text('Non', 'No')} ↘</span><strong>{featured ? `×${(featured.no_odds / 100).toFixed(2)}` : '×'}</strong></Link></div>
+                        <p>{text('Cotes fixes · Consultez les règles avant de participer', 'Fixed odds · Read the rules before participating')}</p>
+                    </article><div className="pa-art-sticker">{text('Le futur se joue', 'The future starts')}<br /><strong>{text('maintenant. ↗', 'now. ↗')}</strong></div>
                 </div>
-            </section></div>
-            <section id="how-it-works" className="landing-section"><h2 className="section-title text-center">{text('Comment ça marche ?', 'How does it work?')}</h2><p className="section-desc text-center">{text('De votre première conviction au résultat, en quatre étapes.', 'From your first conviction to the outcome in four steps.')}</p><div className="steps-grid">{[
-                [text('Créez votre compte', 'Create your account'), text('Retrouvez vos positions, vos opérations et vos demandes dans un espace personnel.', 'Manage your positions, transactions and support requests in your workspace.')],
-                [text('Alimentez votre portefeuille', 'Fund your wallet'), text('Utilisez un opérateur Mobile Money activé. Votre solde est crédité après confirmation NDSGPay.', 'Use an enabled Mobile Money operator. Funds become available after NDSGPay confirmation.')],
-                [text('Prenez position', 'Take a position'), text('Lisez les règles, choisissez Oui ou Non et vérifiez votre mise et votre cote.', 'Read the rules, choose Yes or No and check your stake and odds.')],
-                [text('Suivez le résultat', 'Follow the outcome'), text('La source de résolution est enregistrée. Les gains ou remboursements rejoignent votre portefeuille.', 'The settlement source is recorded. Winnings or refunds are credited to your wallet.')],
-            ].map(([title, body], i) => <article className="step-card" key={title}><div className="step-num">{i + 1}</div><h3>{title}</h3><p>{body}</p></article>)}</div></section>
-            <section id="landing-markets" className="landing-section landing-section--alt"><h2 className="section-title text-center">{text('Tous les marchés', 'Explore the markets')}</h2><p className="section-desc text-center">{text('Des événements publiés, des règles vérifiables et des cotes connues à l’avance.', 'Published events, verifiable rules and odds you know in advance.')}</p>
-                <div className="predictions-grid">{markets?.data.length ? markets.data.map(m => <article className="predict-card" key={m.id}><div className="predict-card__header"><span className="category-tag">{m.category}</span><span>{text('Ouvert', 'Open')}</span></div><h3 className="predict-card__question"><Link href={`/markets/${m.id}`}>{m.title}</Link></h3><div className="predict-card__odds"><Link className="btn btn--odds" href={`/markets/${m.id}`}>{text('Oui', 'Yes')} ×{(m.yes_odds / 100).toFixed(2)}</Link><Link className="btn btn--odds" href={`/markets/${m.id}`}>{text('Non', 'No')} ×{(m.no_odds / 100).toFixed(2)}</Link></div></article>) : <p className="official-empty">{text('Aucun marché ouvert pour le moment. Revenez découvrir les prochaines publications.', 'There are no open markets yet. Check back for the next published events.')}</p>}</div>
-                <div className="text-center"><Link className="btn btn--primary btn--lg" href={authenticated ? '/markets' : '/login'}>{text('Accéder à la Bourse pour négocier', 'Open the marketplace')}</Link></div>
             </section>
-            <section id="faq" className="landing-section"><h2 className="section-title text-center">{text('Foire Aux Questions', 'Frequently asked questions')}</h2><p className="section-desc text-center">{text('Tout ce qu’il faut savoir sur PredicAfrica.', 'What you need to know about PredicAfrica.')}</p><div className="faq-accordion-wrapper">{faq[locale].map(([q, a]) => <details className="faq-item" key={q}><summary className="faq-question">{q}</summary><div className="official-faq-answer"><p>{a}</p></div></details>)}</div></section>
-            {market && <section id="yield-calc" className="landing-section landing-section--alt"><h2 className="section-title text-center">{text('Estimez votre retour potentiel', 'Estimate your potential return')}</h2><p className="section-desc text-center">{facts.fixed}</p><div className="creator-card official-calculator"><label>{text('Marché · position Oui', 'Market · Yes position')}<select value={selected || String(market.id)} onChange={e => setSelected(e.target.value)}>{markets?.data.map(m => <option value={m.id} key={m.id}>{m.title}</option>)}</select></label><label>{text('Mise en XAF', 'Stake in XAF')}<input type="number" min="100" max="1000000" step="1" value={stake} onChange={e => setStake(e.target.value)} /></label><output aria-live="polite">{text('Retour si gagné', 'Return if won')} : <strong>{money(payout)} XAF</strong></output><p>{text('Mise incluse. Si perdu : 0 XAF retourné. Ce calcul ne place aucune mise.', 'Includes your stake. If lost: 0 XAF returned. This calculation does not place a position.')}</p></div></section>}
-            <section id="contact" className="landing-section"><h2 className="section-title text-center">Contact & Support</h2><p className="section-desc text-center">{text('Une question sur votre compte, un marché ou un paiement ?', 'A question about your account, a market or a payment?')}</p><div className="contact-layout official-contact"><div className="contact-card"><h3>{text('Centre d’aide', 'Help centre')}</h3><p>{text('Consultez les étapes et les règles de fonctionnement.', 'Read about how the service works.')}</p><Link href="/help">{text('Consulter l’aide', 'Read the help centre')} →</Link></div><div className="contact-card"><h3>{text('Votre conversation', 'Your support conversation')}</h3><p>{text('Ouvrez un ticket et suivez les réponses depuis votre compte.', 'Open a ticket and follow the replies in your account.')}</p><Link href={authenticated ? '/support' : '/login'}>{text('Contacter le support', 'Contact support')} →</Link></div></div></section>
+            <div className="pa-stat-strip"><div className="pa-container"><span>{text('UNE AUTRE FAÇON DE SUIVRE L’ACTUALITÉ', 'A NEW WAY TO FOLLOW THE NEWS')}</span><div><strong>{stats.open_markets || 0}</strong> {text('marchés ouverts', 'open markets')}</div><div><strong>{money(stats.volume || 0)}</strong> XAF {text('échangés', 'traded')}</div><div><strong>Oui / Non</strong> {text('à vous de choisir', 'your call')}</div></div></div>
+            <section id="landing-markets" className="pa-container pa-markets"><div className="pa-section-heading"><div><div className="pa-eyebrow">{text('LE POULS DU CONTINENT', 'THE PULSE OF THE CONTINENT')}</div><h2>{text('Qu’est-ce qui se joue ?', 'What’s happening next?')}</h2></div><Link className="pa-text-link" href="/markets">{text('Tous les marchés', 'All markets')} ↗</Link></div>
+                <div className="pa-market-toolbar"><div className="pa-categories" aria-label={text('Filtrer par catégorie', 'Filter by category')}>{['', ...categories].map(c => <button type="button" key={c} className={category === c ? 'is-active' : ''} aria-pressed={category === c} onClick={() => setCategory(c)}>{symbols[c] || '✳'} {c || text('À la une', 'Featured')}</button>)}</div><label className="pa-search"><span aria-hidden="true">⌕</span><input aria-label={text('Rechercher un marché', 'Search markets')} placeholder={text('Une conviction en tête ?', 'Something on your mind?')} value={query} onChange={e => setQuery(e.target.value)} /></label></div>
+                <div className="pa-market-grid" aria-live="polite">{filtered.length ? filtered.map((m, i) => <article className="pa-market-card" key={m.id}><div className="pa-card-top"><span className={`pa-category-icon pa-color-${i % 4}`} aria-hidden="true">{symbols[m.category] || '◎'}</span><span className="pa-tag">{m.category}</span><span className="pa-market-arrow">↗</span></div><h3><Link href={`/markets/${m.id}`}>{m.title}</Link></h3><div className="pa-outcomes"><Link href={`/markets/${m.id}`}>{text('Oui', 'Yes')} <strong>×{(m.yes_odds / 100).toFixed(2)}</strong></Link><Link href={`/markets/${m.id}`}>{text('Non', 'No')} <strong>×{(m.no_odds / 100).toFixed(2)}</strong></Link></div><div className="pa-market-meta"><span><span className="pa-dot" />{text('Ouvert', 'Open')}</span><span>{m.volume != null ? `${money(m.volume)} XAF` : text('Cotes fixes', 'Fixed odds')}</span></div></article>) : <div className="pa-empty"><span>◎</span><h3>{text(data.length ? 'Pas de marché pour cette recherche.' : 'Les prochaines questions arrivent.', data.length ? 'No markets match your search.' : 'New questions are on their way.')}</h3><p>{text('Sport, politique, culture : le continent ne manque pas de sujets.', 'Sport, politics, culture: the continent has plenty to talk about.')}</p>{data.length > 0 && <button className="pa-text-link" onClick={() => {setQuery(''); setCategory('');}}>{text('Réinitialiser les filtres', 'Reset filters')} →</button>}</div>}</div>
+            </section>
+            <section id="how-it-works" className="pa-how"><div className="pa-container"><div className="pa-section-heading"><div><div className="pa-eyebrow">{text('VOTRE INTUITION A SA PLACE ICI', 'YOUR INTUITION BELONGS HERE')}</div><h2>{text('Une conviction. Une position.', 'One conviction. One position.')}</h2></div><p>{text('Pas besoin de tout savoir. Commencez par ce que vous connaissez.', 'You don’t need to know everything. Start with what you know.')}</p></div><div className="pa-steps">{[
+                    [text('Choisissez votre sujet.', 'Find your subject.'), text('Explorez les marchés et lisez les règles ainsi que la source de résolution.', 'Explore markets and read the rules and resolution source.'), '◎'],
+                    [text('Faites votre choix.', 'Make your call.'), text('Alimentez votre portefeuille via un opérateur Mobile Money activé. Choisissez Oui ou Non et vérifiez la cote.', 'Fund your wallet with an enabled Mobile Money operator. Choose Yes or No and check the odds.'), '↗'],
+                    [text('Suivez le dénouement.', 'Follow the outcome.'), text('Retrouvez vos positions dans votre espace. À la résolution, les gains éventuels rejoignent votre portefeuille.', 'Track your positions in your workspace. On settlement, any winnings are credited to your wallet.'), '⚑'],
+                ].map(([title, body, icon], i) => <article key={title}><div className="pa-step-top"><span>0{i + 1}</span><span>{icon}</span></div><h3>{title}</h3><p>{body}</p></article>)}</div></div></section>
+            {market && <section id="yield-calc" className="pa-container pa-calculator"><div><div className="pa-eyebrow">{text('LES CHIFFRES AVANT LE CHOIX', 'THE NUMBERS BEFORE THE CHOICE')}</div><h2>{text('Votre conviction, en chiffres.', 'Your conviction, in numbers.')}</h2><p>{text('Simulez le retour potentiel d’une position Oui, à la cote affichée.', 'Estimate the potential return of a Yes position at the displayed odds.')}</p></div><div className="pa-calc-form"><label>{text('Le marché', 'The market')}<select value={selected || String(market.id)} onChange={e => setSelected(e.target.value)}>{data.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}</select></label><div className="pa-calc-bottom"><label>{text('Votre mise · XAF', 'Your stake · XAF')}<input type="number" min="100" max="1000000" step="1" value={stake} onChange={e => setStake(e.target.value)} /></label><output aria-live="polite"><span>{text('Retour si gagné', 'Return if won')}</span><strong>{money(Math.floor(amount * market.yes_odds / 100))} <small>XAF</small></strong></output></div><p>{text('Mise incluse. Si perdu : 0 XAF retourné. Simulation sans engagement.', 'Stake included. If lost: 0 XAF returned. This simulation places no position.')}</p></div></section>}
+            <section id="faq" className="pa-container pa-faq"><div><div className="pa-eyebrow">{text('TOUT SIMPLEMENT', 'KEEPING IT SIMPLE')}</div><h2>{text('Les bonnes questions.', 'Good questions.')}</h2><p>{text('Et des réponses claires.', 'And clear answers.')}</p><Link className="pa-text-link" href="/help">{text('Visiter le centre d’aide', 'Visit the help centre')} ↗</Link></div><div>{faq[locale].map(([q, a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
+            <section className="pa-final"><div className="pa-container"><div className="pa-eyebrow">PREDICAFRICA</div><h2>{text('Ne suivez pas seulement', 'Don’t just follow')}<br />{text('l’histoire. Prenez position.', 'the story. Take a position.')}</h2><Link className="pa-button" href={start}>{text('À vous de jouer', 'Make your call')} ↗</Link><span className="pa-final-star" aria-hidden="true">✳</span></div></section>
         </main>
-        <footer className="landing-footer official-footer"><p>© {new Date().getFullYear()} PredicAfrica. {text('Tous droits réservés.', 'All rights reserved.')}</p><PwaInstall/><nav><Link href="/terms">{text('Conditions générales', 'Terms')}</Link><Link href="/privacy">{text('Confidentialité', 'Privacy')}</Link><Link href="/data">{text('Gestion des données', 'Your data')}</Link></nav></footer>
+        <footer id="contact" className="pa-container pa-footer"><div className="pa-footer-top"><Link className="pa-brand" href="/">predic<span>africa</span><i>®</i></Link><p>{text('Le continent a des idées. Donnez de la valeur aux vôtres.', 'The continent has ideas. Put yours into play.')}</p><Link href={authenticated ? '/support' : '/login'}>{text('Contacter le support', 'Contact support')} ↗</Link></div><div className="pa-footer-bottom"><span>© {new Date().getFullYear()} PredicAfrica</span><nav><Link href="/terms">{text('Conditions', 'Terms')}</Link><Link href="/privacy">{text('Confidentialité', 'Privacy')}</Link><Link href="/data">{text('Données', 'Data')}</Link></nav><PwaInstall /></div><p className="pa-risk">{text('Prendre position comporte un risque de perte de votre mise. Évaluez ce risque avant de participer. Aucun gain n’est garanti.', 'Taking a position involves the risk of losing your stake. Consider this risk before participating. No winnings are guaranteed.')}</p></footer>
     </div>;
 }
