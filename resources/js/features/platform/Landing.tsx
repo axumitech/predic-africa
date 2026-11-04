@@ -54,7 +54,7 @@ export default function Landing({ authenticated, markets, stats = {} }: { authen
                 <div className="landing-hero__content"><span className="hero-badge">{text('Vos convictions prennent position', 'Put your convictions into play')}</span>
                     <h1 className="hero-title">{text('La première Bourse de Prédictions en Afrique', 'Africa’s prediction marketplace')}</h1>
                     <p className="hero-desc">{text('Politique, sport, musique et économie : explorez les questions qui font bouger le continent. Choisissez Oui ou Non et suivez vos positions à cote fixe.', 'Politics, sport, music and the economy: explore the questions shaping the continent. Choose Yes or No and follow your fixed-odds positions.')}</p>
-                    <div className="hero-actions"><Link className="btn btn--primary btn--lg" id="btn-hero-start" href={authenticated ? '/markets' : '/register'}>{text('Commencer à négocier', 'Get started')} →</Link></div>
+                    <div className="hero-actions"><Link className="btn btn--primary btn--lg" id="btn-hero-start" href={authenticated ? '/markets' : '/register'}>{text('Commencer à négocier', 'Get started')} →</Link><a className="btn btn--lg hero-explore" href="#landing-markets">{text('Explorer les marchés', 'Explore markets')} ↗</a></div>
                     <div className="hero-metrics">
                         <div className="hero-metric"><span className="metric-val">{money(stats.volume || 0)} XAF</span><span className="metric-lbl">{text('Volume échangé', 'Traded volume')}</span></div>
                         <div className="hero-metric"><span className="metric-val">{stats.open_markets || 0}</span><span className="metric-lbl">{text('Marchés ouverts', 'Open markets')}</span></div>
