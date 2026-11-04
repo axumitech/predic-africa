@@ -1,9 +1,9 @@
 /* Public marketplace. All styles are scoped to preserve the trading workspace. */
 #official-landing {
-    --pa-green:#16764b;
-    --pa-ink:#172b23;
-    --pa-muted:#68746d;
-    --pa-line:#e3e8e2;
+    --pa-green:#b08000;
+    --pa-ink:#071426;
+    --pa-muted:#64748b;
+    --pa-line:#dde4ee;
     background:#fff;
     color:var(--pa-ink);
     font-family:Inter,Arial,sans-serif;
@@ -24,7 +24,7 @@
      -webkit-tap-highlight-color:transparent
 }
 #official-landing :focus-visible {
-    outline:3px solid #218b5f;
+    outline:3px solid #f5b700;
     outline-offset:5px
 }
 #official-landing section[id] {
@@ -81,7 +81,7 @@
     letter-spacing:0
 }
 .pa-brand-mark {
-    background:#16764b;
+    background:#b08000;
     color:#fff;
     border-radius:9px;
     width:33px;
@@ -146,7 +146,7 @@
     transition:background .2s,transform .2s
 }
 .pa-button:hover {
-    background:#105b39;
+    background:#ffd45a;
     transform:translateY(-2px)
 }
 .pa-button-small {
@@ -228,7 +228,7 @@
     height:480px;
     position:relative;
     border-radius:4px;
-    background:#eef3e9;
+    background:#edf1f7;
     isolation:isolate;
     display:flex;
     align-items:center;
@@ -238,7 +238,7 @@
 .pa-art-grid {
     position:absolute;
     inset:0;
-    background-image:linear-gradient(#cad7c94d 1px,transparent 1px),linear-gradient(90deg,#cad7c94d 1px,transparent 1px);
+    background-image:linear-gradient(#bdcbe04d 1px,transparent 1px),linear-gradient(90deg,#bdcbe04d 1px,transparent 1px);
     background-size:34px 34px;
     mask-image:linear-gradient(150deg,#000,transparent)
 }
@@ -248,7 +248,7 @@
     left:23px;
     font-size:8px;
     letter-spacing:2px;
-    color:#7e8f7b
+    color:#64748b
 }
 .pa-continent {
     position:absolute;
@@ -262,13 +262,13 @@
 .pa-continent svg {
     width:100%;
     height:100%;
-    fill:#bacead;
-    stroke:#a6c198;
+    fill:#bdcbe0;
+    stroke:#9eafc8;
     stroke-width:1
 }
 .pa-orbit {
     position:absolute;
-    border:1px solid #b6c6ae;
+    border:1px solid #b7c5d9;
     border-radius:50%;
     width:470px;
     height:470px;
@@ -286,9 +286,9 @@
     width:84%;
     background:#fff;
     padding:26px;
-    border:1px solid #e5e9df;
+    border:1px solid #dde4ee;
     border-radius:12px;
-    box-shadow:0 18px 40px #24452a15;
+    box-shadow:0 18px 40px #07142615;
     transform:rotate(-3deg);
     margin-top:5px;
     transition:transform .3s
@@ -361,8 +361,8 @@
     position:absolute;
     bottom:21px;
     right:17px;
-    background:#d5ee78;
-    color:#293a20;
+    background:#f5b700;
+    color:#071426;
     font-size:14px;
     line-height:1.3;
     padding:17px 23px;
@@ -374,7 +374,7 @@
 }
 .pa-stat-strip {
     border-block:1px solid var(--pa-line);
-    background:#fafbf8
+    background:#f6f8fc
 }
 .pa-stat-strip>.pa-container {
     min-height:79px;
@@ -440,17 +440,17 @@
 }
 .pa-categories button.is-active {
     color:var(--pa-green);
-    background:#eaf2e9;
+    background:#fff3cc;
     font-weight:700
 }
 .pa-categories button:hover {
-    background:#f0f4ed
+    background:#fff7e0
 }
 .pa-search {
     display:flex;
     align-items:center;
     gap:9px;
-    background:#f5f6f3;
+    background:#f1f4f8;
     padding:9px 12px;
     border-radius:5px;
     min-width:210px
@@ -479,7 +479,7 @@
 }
 .pa-market-card:hover {
     transform:translateY(-4px);
-    box-shadow:0 10px 25px #172b230a
+    box-shadow:0 10px 25px #0714260a
 }
 .pa-category-icon {
     height:37px;
@@ -500,8 +500,8 @@
     color:#bd735d
 }
 .pa-color-3 {
-    background:#e7efde;
-    color:#6d8c4d
+    background:#fff3cc;
+    color:#8f6900
 }
 .pa-market-arrow {
     margin-left:auto;
@@ -533,9 +533,9 @@
 .pa-empty {
     grid-column:1/-1;
     padding:45px 24px;
-    background:#f7f9f4;
+    background:#f6f8fc;
     text-align:center;
-    border:1px dashed #ccd7c7;
+    border:1px dashed #c7d2df;
     border-radius:9px
 }
 .pa-empty>span {
@@ -554,8 +554,8 @@
     margin-top:16px
 }
 .pa-how {
-    background:#f6f7f2;
-    border-block:1px solid #e9ece3;
+    background:#f6f8fc;
+    border-block:1px solid #e5eaf2;
     padding:65px 0
 }
 .pa-steps {
@@ -565,7 +565,7 @@
     margin-top:40px
 }
 .pa-steps article+article {
-    border-left:1px solid #dce2d6;
+    border-left:1px solid #dde4ee;
     padding-left:35px
 }
 .pa-step-top {
@@ -573,7 +573,7 @@
     align-items:center;
     justify-content:space-between;
     margin-bottom:25px;
-    color:#8b9a82
+    color:#7c8ca2
 }
 .pa-step-top>span:first-child {
     font-size:12px;
@@ -627,7 +627,7 @@
     width:100%;
     font-size:12px;
     color:var(--pa-ink);
-    background:#fafbf8
+    background:#f6f8fc
 }
 .pa-calc-bottom {
     display:grid;
@@ -696,7 +696,7 @@
     line-height:1.9
 }
 .pa-final {
-    background:#173d2b;
+    background:#071426;
     color:#fff;
     padding:60px 0;
     position:relative;
@@ -706,7 +706,7 @@
     position:relative
 }
 .pa-final .pa-eyebrow {
-    color:#b7cdad
+    color:#f5b700
 }
 .pa-final h2 {
     font-size:46px!important;
@@ -717,8 +717,8 @@
     z-index:1
 }
 .pa-final .pa-button {
-    background:#d4ed8b;
-    color:#203c26!important;
+    background:#f5b700;
+    color:#071426!important;
     position:relative;
     z-index:1
 }
@@ -727,7 +727,7 @@
     right:5%;
     top:-65px;
     font-size:300px;
-    color:#365c3a;
+    color:#213554;
     line-height:1.3
 }
 .pa-footer {
@@ -1053,7 +1053,7 @@
     }
     .pa-steps article+article {
         border-left:0;
-        border-top:1px solid #dce2d6;
+        border-top:1px solid #dde4ee;
         padding:23px 0 0
     }
     .pa-step-top {
@@ -1120,3 +1120,27 @@
     }
 
 }
+
+/* Original PredicAfrica identity: white/gold logo, navy and gold palette. */
+#official-landing .pa-header { background: #071426f5; color: #fff; border-bottom-color: #213554; }
+#official-landing .pa-brand { flex-shrink: 0; }
+#official-landing .pa-brand img { display: block; width: 190px; height: auto; object-fit: contain; }
+#official-landing .pa-header-actions .locale-switch { color: inherit; }
+#official-landing .pa-button { background: #f5b700; color: #071426 !important; }
+#official-landing .pa-button:hover { background: #ffd45a; }
+#official-landing .pa-nav-active:after { background: #f5b700; }
+#official-landing .pa-footer-top .pa-brand { background: #071426; padding: 8px 14px; border-radius: 6px; }
+@media (max-width: 800px) { #official-landing .pa-brand img { width: 155px; } }
+@media (max-width: 580px) { #official-landing .pa-header .pa-brand img { width: 122px; } #official-landing .pa-header-actions { margin-left: auto; } }
+
+/* Unified vector icon system, independent of the device font. */
+#official-landing .pa-icon { display: inline-block; width: 18px; height: 18px; flex-shrink: 0; vertical-align: middle; }
+#official-landing .pa-categories button { display: inline-flex; align-items: center; gap: 7px; }
+#official-landing .pa-categories .pa-icon { width: 15px; height: 15px; }
+#official-landing .pa-category-icon .pa-icon { width: 23px; height: 23px; }
+#official-landing .pa-step-top .pa-icon { width: 29px; height: 29px; }
+#official-landing .pa-outcomes a > span { display: inline-flex; align-items: center; gap: 6px; }
+#official-landing .pa-outcomes .pa-icon { width: 13px; height: 13px; }
+#official-landing .pa-art-sticker .pa-icon { width: 20px; height: 20px; }
+#official-landing .pa-final-star svg { width: 260px; height: 260px; }
+#official-landing .pa-footer-top > a:last-child { display: inline-flex; align-items: center; gap: 8px; }
