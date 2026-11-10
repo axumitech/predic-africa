@@ -26,6 +26,10 @@ Effectuer cette migration en maintenance, après sauvegarde. Son rollback automa
 
 L’ancien service Python produisait des scores aléatoires. Il est retiré de `services/` et conservé dans `legacy/retired-ai/`. Le connecteur Laravel reste disponible pour un futur service réel, désactivé par défaut ; il exige explicitement `simulation=false`, y compris pour la génération et les réponses cachées. Les sources déclarées synthétiques ou non qualifiées sont refusées. Les propositions importées restent soumises aux validations et à la modération ; aucune donnée fictive n’est publiée automatiquement.
 
+Le planificateur Laravel consulte toutes les six heures les programmes des qualifications de la CAN publiés par la CAF, le calendrier de l’Union africaine et celui des décisions de politique monétaire de la banque centrale sud-africaine. L’espace **Pipeline IA** permet aussi de lancer la collecte. La commande `php artisan markets:discover-africa --dry-run` vérifie les sources en lecture seule. Une source indisponible ne bloque pas les autres.
+
+Le générateur transforme les événements futurs en brouillons Oui / Non, conserve l’annonce et la source de résolution, et déduplique les événements déjà traités. Chaque nouveau brouillon ou import déclenche une notification dans l’application pour les administrateurs actifs. Ils peuvent modifier les règles, l’échéance et les cotes avant de confirmer la publication. La clôture des mises ne peut pas dépasser la limite issue du calendrier officiel. Les cotes initiales sont indicatives et doivent être revues à la validation.
+
 ## Tests
 
 PHPUnit force une base SQLite en mémoire et un chemin de cache distinct. `Tests\TestCase` refuse de migrer une base applicative en cas de configuration inattendue. Les tests navigateur possèdent leur propre fichier SQLite et aucun appel NDSGPay réel. Les tests MySQL/InnoDB utilisent une base éphémère et observent les attentes de verrous ; SQLite ne prouve pas le comportement concurrent en production.

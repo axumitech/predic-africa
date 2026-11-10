@@ -87,6 +87,9 @@ class PlatformController extends Controller
             abort_unless($market, 404);
             Gate::authorize('view-market', $market);
             $data['market'] = $market;
+            if ($data['adminView'] && $market->status === 'pending') {
+                $data['marketReviewVersion'] = \App\Modules\Markets\MarketDraft::revision($market);
+            }
             $data['volume'] = (int) DB::table('positions')->where('market_id', $id)->sum('stake');
             $data['participants'] = DB::table('positions')->where('market_id', $id)->distinct()->count('user_id');
         }
@@ -206,6 +209,11 @@ class PlatformController extends Controller
             })->values();
         }
         if (in_array($page, ['predictions', 'admin-pipeline'])) {
+            if ($page === 'admin-pipeline') {
+                $data['reviewQueue'] = DB::table('markets')->whereNotNull('pipeline_source')->where('status', 'pending')
+                    ->where('closes_at', '>', now())->orderBy('closes_at')->limit(100)
+                    ->get(['id', 'title', 'category', 'closes_at']);
+            }
             try {
                 $data['pipeline'] = app(PipelineClient::class)->read($page === 'admin-pipeline' ? 'markets' : 'predictions', null);
             } catch (\Throwable $exception) {

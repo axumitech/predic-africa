@@ -62,6 +62,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/admin/markets/{id}/moderate', [MarketController::class, 'moderate'])->whereNumber('id');
         Route::post('/admin/markets/{id}/resolve', [SettlementController::class, 'store'])->whereNumber('id');
         Route::post('/admin/pipeline/generate', [PipelineAdminController::class, 'generate'])->middleware('throttle:3,1,pipeline-generate:');
+        Route::post('/admin/pipeline/generate-africa', [PipelineAdminController::class, 'generateAfrican'])->middleware('throttle:3,1,pipeline-africa:');
         Route::post('/admin/pipeline/import', [PipelineAdminController::class, 'import']);
         Route::post('/admin/users/{id}', [IdentityController::class, 'suspend'])->whereNumber('id');
     });

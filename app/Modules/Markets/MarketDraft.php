@@ -8,6 +8,14 @@ use Illuminate\Validation\Rule;
 
 final class MarketDraft
 {
+    public static function revision(object $market): string
+    {
+        return hash('sha256', json_encode([
+            $market->id, $market->status, $market->title, $market->description, $market->category,
+            $market->closes_at, $market->source_closes_at ?? null, $market->yes_odds, $market->no_odds, $market->updated_at,
+        ], JSON_THROW_ON_ERROR));
+    }
+
     public static function validated(array $input): array
     {
         foreach (['title', 'description'] as $field) {
