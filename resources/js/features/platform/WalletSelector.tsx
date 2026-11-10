@@ -53,16 +53,15 @@ export default function WalletSelector({ currency, manage = false }: { currency:
             </div>
         </div>
         {manage && index < wallets.length && <div className="p-wallet-card-actions" role="group" aria-label={`Actions du portefeuille ${currency}`}>
-            <button type="button" disabled={busy} aria-pressed={action === 'deposit'} aria-controls={`${titleId}-deposit`} onClick={() => setAction('deposit')}><span aria-hidden="true">↓</span>Déposer</button>
-            <button type="button" disabled={busy} aria-pressed={action === 'withdraw'} aria-controls={`${titleId}-withdraw`} onClick={() => setAction('withdraw')}><span aria-hidden="true">↑</span>Retirer<small>Indisponible</small></button>
+            <button type="button" disabled={busy} aria-pressed={action === 'deposit'} aria-controls={`${titleId}-mobile-money`} onClick={() => setAction('deposit')}><span aria-hidden="true">↓</span>Déposer</button>
+            <button type="button" disabled={busy} aria-pressed={action === 'withdraw'} aria-controls={`${titleId}-mobile-money`} onClick={() => setAction('withdraw')}><span aria-hidden="true">↑</span>Retirer{!ndsgpay?.payout && <small>Indisponible</small>}</button>
             <button type="button" disabled={busy} aria-pressed={action === 'transfer'} aria-controls={`${titleId}-transfer`} onClick={() => setAction('transfer')}><span aria-hidden="true">⇄</span>Transférer</button>
         </div>}
         <div className="p-wallet-carousel-pagination" aria-label="Navigation des portefeuilles">{wallets.map((wallet, position) => <button type="button" key={wallet.id} disabled={busy} aria-label={`Choisir le portefeuille ${wallet.currency}`} aria-current={index === position ? 'true' : undefined} onClick={() => goTo(position)}><span aria-hidden="true"/>{wallet.currency}</button>)}<button type="button" disabled={busy} aria-label="Ajouter un portefeuille" aria-current={index === wallets.length ? 'true' : undefined} onClick={() => goTo(wallets.length)}><span aria-hidden="true">＋</span>Ajouter</button></div>
         <p className="p-wallet-carousel-status" role="status">{switching ? 'Changement de portefeuille…' : index === wallets.length ? 'Choisissez la devise de votre nouveau portefeuille.' : `Portefeuille ${currency} sélectionné pour vos transactions.`}</p>
         {switchError && <p className="p-error" role="alert">{switchError}</p>}
         {manage && <div className="p-wallet-action-panels" hidden={index === wallets.length || switching}>
-            <div id={`${titleId}-deposit`} hidden={action !== 'deposit'}><NdsgpayWallet key={currency} data={ndsgpay}/></div>
-            <div id={`${titleId}-withdraw`} hidden={action !== 'withdraw'} className="p-panel"><h3>Retirer depuis mon portefeuille {currency}</h3><p>Les retraits Mobile Money ne sont pas disponibles actuellement.</p></div>
+            <div id={`${titleId}-mobile-money`} hidden={action === 'transfer'}><NdsgpayWallet key={currency} data={ndsgpay} mode={action === 'withdraw' ? 'withdraw' : 'deposit'}/></div>
             <div id={`${titleId}-transfer`} hidden={action !== 'transfer'} className="p-panel">{wallets.length > 1 ? <WalletTransfer key={currency} currency={currency} currencies={wallets.map(wallet => wallet.currency)}/> : <><h3>Transférer entre mes portefeuilles</h3><p>Ajoutez un portefeuille dans une autre devise pour effectuer un transfert avec conversion.</p><button type="button" className="btn btn--primary" onClick={() => goTo(wallets.length)}>Ajouter un portefeuille</button></>}</div>
         </div>}
     </section>;

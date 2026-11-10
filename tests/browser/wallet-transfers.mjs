@@ -11,7 +11,12 @@ const database = join(temp, 'database.sqlite');
 await writeFile(database, '');
 const env = { ...process.env, APP_ENV: 'testing', APP_DEBUG: 'false', LOG_CHANNEL: 'stderr', APP_CONFIG_CACHE: join(temp, 'unused-config.php'),
     DB_CONNECTION: 'sqlite', DB_DATABASE: database, DB_URL: '', CACHE_STORE: 'array', SESSION_DRIVER: 'database', QUEUE_CONNECTION: 'sync',
-    AI_PIPELINE_ENABLED: 'false', FX_REFRESH_ENABLED: 'false', CURRENCYAPI_KEY: '', NDSGPAY_ENABLED: 'false' };
+    AI_PIPELINE_ENABLED: 'false', FX_REFRESH_ENABLED: 'false', CURRENCYAPI_KEY: '',
+    NDSGPAY_ENABLED: 'true', NDSGPAY_SECRET_KEY: 'isolated-test-key', NDSGPAY_WEBHOOK_SECRET: 'isolated-test-hook',
+    NDSGPAY_BASE_URL: 'https://ndsgpay-test.invalid/api', NDSGPAY_PAYOUTS_ENABLED: 'true',
+    NDSGPAY_CAPABILITIES: JSON.stringify([{ country: 'COD', currency: 'CDF', correspondent: 'AIRTEL_COD', calling_code: '243', national_lengths: [9] }]),
+    NDSGPAY_PAYOUT_BENEFICIARIES: JSON.stringify({ 1: { CDF: { country: 'COD', currency: 'CDF', correspondent: 'AIRTEL_COD',
+        msisdn: '243810000123', min_amount: '100', max_amount: '10000', daily_limit: '15000' } } }) };
 const php = args => { const r = spawnSync('php', args, { env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stdout + r.stderr); };
 php(['artisan', 'migrate', '--force']);
 php(['tests/browser/wallet-transfers-fixtures.php']);
@@ -82,12 +87,18 @@ try {
     await page.getByLabel('Devise du nouveau portefeuille').selectOption('CDF');
     await page.getByRole('button', { name: 'Créer un portefeuille' }).click();
     await page.getByText('Portefeuille créé et sélectionné.', { exact: true }).waitFor();
+    await page.getByRole('group', { name: 'Actions du portefeuille CDF' }).getByRole('button', { name: 'Retirer', exact: true }).click();
+    await page.getByRole('heading', { name: 'Retirer depuis mon portefeuille CDF', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).waitFor();
+    await page.getByText(/Airtel Money · •••• 0123/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Continuer le dépôt', exact: true }).count(), 0);
     await page.getByRole('button', { name: 'Portefeuille précédent', exact: true }).click();
     await page.getByText('Portefeuille sélectionné.', { exact: true }).waitFor();
     assert.equal(await page.locator('.p-wallet-summary .p-balance-card').count(), 0);
     const actions = page.getByRole('group', { name: 'Actions du portefeuille XAF' });
     await actions.getByRole('button', { name: 'Retirer' }).click();
-    await page.getByText('Les retraits Mobile Money ne sont pas disponibles actuellement.', { exact: true }).waitFor();
+    await page.getByText('Aucun bénéficiaire Mobile Money vérifié n’est autorisé pour ce portefeuille.', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).count(), 0);
     await actions.getByRole('button', { name: 'Déposer', exact: true }).click();
     await page.getByRole('heading', { name: 'Alimenter mon portefeuille', exact: true }).waitFor();
     await actions.getByRole('button', { name: 'Transférer', exact: true }).click();
@@ -117,7 +128,7 @@ try {
     assert.equal(await page.getByRole('button', { name: 'Choisir le portefeuille CDF' }).getAttribute('aria-current'), 'true');
     await page.getByRole('group', { name: 'Actions du portefeuille CDF' }).getByRole('button', { name: 'Transférer', exact: true }).click();
     await page.clock.install();
-    await page.getByLabel('Montant en CDF', { exact: true }).fill('4');
+    await page.getByRole('spinbutton', { name: 'Montant en CDF', exact: true }).fill('4');
     await page.getByRole('button', { name: 'Voir le taux et le montant reçu' }).click();
     await dialog.waitFor();
     assert.match(await dialog.innerText(), /1 XAF/);

@@ -115,6 +115,12 @@ class PlatformController extends Controller
                 'correspondent_labels' => collect(app(\App\Modules\Payments\Capabilities::class)->forAccount($user))
                     ->mapWithKeys(fn ($capability) => [$capability['correspondent'] => (config('regions.countries.'.$capability['country'].'.name', $capability['country']).' — '.config('ndsgpay_operators.'.$capability['correspondent'].'.name', $capability['correspondent']).' (+'.$capability['calling_code'].')')])->all(),
                 'payoutsEnabled' => $beneficiary !== null,
+                'payout_unavailable_message' => match (true) {
+                    ! config('payments.payouts_enabled') => 'Les retraits Mobile Money ne sont pas encore ouverts.',
+                    ! $ready || $paymentSettings['app_maintenance'] => 'Le service de retrait est temporairement indisponible.',
+                    $beneficiary === null => 'Aucun bénéficiaire Mobile Money vérifié n’est autorisé pour ce portefeuille.',
+                    default => null,
+                },
                 'payout' => $beneficiary ? [
                     'token' => $beneficiary['token'],
                     'correspondent' => $beneficiary['correspondent'],
