@@ -3,11 +3,15 @@
 namespace App\Modules\Payments;
 
 use App\Models\User;
+use App\Modules\Infrastructure\Settings;
 use App\Modules\Ledger\Ledger;
 use App\Modules\Money\Money;
+use App\Modules\Money\Wallets;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -15,6 +19,10 @@ use Illuminate\Validation\ValidationException;
 class Payments
 {
     public const FINAL = ['completed', 'failed'];
+
+    private const DEPOSIT_STATUSES = ['INITIATED', 'SUBMITTED', 'COMPLETED', 'FAILED'];
+
+    private const PAYOUT_STATUSES = ['INITIATED', 'SUBMITTED', 'ACCEPTED', 'ENQUEUED', 'COMPLETED', 'FAILED'];
 
     public function anomaly(?int $paymentId, string $code, string $scope = ''): void
     {
@@ -26,23 +34,63 @@ class Payments
 
     public function create(int $userId, array $data): object
     {
-        abort_unless(app(PaymentPolicy::class)->deposit(User::findOrFail($userId)), 403);
-        abort_if(($data['kind'] ?? '') !== 'deposit', 403, 'Payouts désactivés.');
-        abort_unless(app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(), 503, 'Les dépôts sont temporairement indisponibles.');
+        $user = User::findOrFail($userId);
+        abort_unless(app(PaymentPolicy::class)->deposit($user), 403);
+        $kind = $data['kind'] ?? null;
+        abort_unless(in_array($kind, ['deposit', 'withdraw'], true), 403);
+        $payout = $kind === 'withdraw';
+        $settings = app(Settings::class);
+        abort_unless($payout ? ! $settings->current()['app_maintenance'] : $settings->acceptingDeposits(),
+            503, 'Cette opération est temporairement indisponible.');
         abort_unless(app(Ndsgpay::class)->ready(), 503, 'NDSGPay non configuré.');
         abort_if(app()->isProduction() && (config('app.debug') || in_array(config('queue.default'), ['sync', 'null', 'deferred', 'background'])), 503, 'Configuration de production incomplète.');
         abort_unless(Str::isUuid($data['reference'] ?? ''), 422);
-        $data = app(Capabilities::class)->validate($data);
+        $passwordHash = null;
+        $beneficiary = null;
+        if ($payout) {
+            $beneficiary = app(PayoutBeneficiaries::class)->find($userId, Wallets::currency($userId));
+            abort_unless($beneficiary, 403);
+            if (($data['currency'] ?? null) !== $beneficiary['currency']) {
+                throw ValidationException::withMessages(['currency' => 'La devise du retrait doit correspondre au portefeuille sélectionné.']);
+            }
+            if (($data['correspondent'] ?? null) !== $beneficiary['correspondent']) {
+                throw ValidationException::withMessages(['correspondent' => 'Cet opérateur ne correspond pas au bénéficiaire autorisé pour ce portefeuille.']);
+            }
+            if (array_key_exists('msisdn', $data) || array_key_exists('country', $data)) {
+                throw ValidationException::withMessages(['beneficiary' => 'La destination du retrait est définie par le bénéficiaire vérifié.']);
+            }
+            if (! is_string($data['beneficiary'] ?? null) || ! hash_equals($beneficiary['token'], $data['beneficiary'])) {
+                throw ValidationException::withMessages(['beneficiary' => 'Le bénéficiaire a changé. Rechargez la page.']);
+            }
+            $passwordHash = $user->getAuthPassword();
+            if (! is_string($data['current_password'] ?? null) || ! Hash::check($data['current_password'], $passwordHash)) {
+                throw ValidationException::withMessages(['current_password' => 'Mot de passe incorrect.']);
+            }
+            $data = [
+                'kind' => $kind, 'reference' => $data['reference'],
+                'amount' => Money::minor($data['amount'] ?? null, $beneficiary['currency']),
+                ...array_intersect_key($beneficiary, array_flip(['country', 'currency', 'correspondent', 'msisdn'])),
+            ];
+        } else {
+            $data = app(Capabilities::class)->validate($data);
+        }
         $fingerprint = hash_hmac('sha256', json_encode([$userId, $data['kind'], $data['amount'], $data['currency'], $data['country'], $data['correspondent'], $data['msisdn']]), config('app.key'));
         try {
-            $payment = DB::transaction(function () use ($userId, $data, $fingerprint) {
-                $user = DB::table('users')->where('id', $userId)->lockForUpdate()->firstOrFail();
-                abort_if($user->suspended, 403);
+            $payment = DB::transaction(function () use ($userId, $data, $fingerprint, $payout, $settings, $beneficiary, $passwordHash) {
+                $user = User::query()->lockForUpdate()->findOrFail($userId);
+                abort_unless(app(PaymentPolicy::class)->deposit($user), 403);
                 DB::table('infrastructure_settings')->where('id', 1)->lockForUpdate()->firstOrFail();
-                abort_unless(app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(), 503, 'Les dépôts sont temporairement indisponibles.');
-                $limits = app(\App\Modules\Infrastructure\Settings::class)->current();
-                abort_if($data['amount'] < Money::minor($limits['min_amount'], $data['currency']) || $data['amount'] > Money::minor($limits['max_amount'], $data['currency']), 422, 'Limites de dépôt modifiées.');
-                abort_unless(in_array($data['correspondent'], array_column(app(Capabilities::class)->enabled(), 'correspondent'), true), 422, 'Opérateur suspendu.');
+                $currency = Wallets::currency($userId);
+                if ($payout) {
+                    abort_if($settings->current()['app_maintenance'], 503, 'Les retraits sont temporairement indisponibles.');
+                    abort_unless($user->getAuthPassword() === $passwordHash
+                        && app(PayoutBeneficiaries::class)->find($userId, $currency) === $beneficiary, 403);
+                } else {
+                    abort_unless($settings->acceptingDeposits(), 503, 'Les dépôts sont temporairement indisponibles.');
+                    $limits = $settings->current();
+                    abort_if($data['amount'] < Money::minor($limits['min_amount'], $data['currency']) || $data['amount'] > Money::minor($limits['max_amount'], $data['currency']), 422, 'Limites de dépôt modifiées.');
+                    abort_unless(in_array($data['correspondent'], array_column(app(Capabilities::class)->enabled(), 'correspondent'), true), 422, 'Opérateur suspendu.');
+                }
                 $prior = DB::table('payments')->where('reference', $data['reference'])->first();
                 if ($prior) {
                     $matches = $prior->fingerprint && hash_equals($prior->fingerprint, $fingerprint);
@@ -57,34 +105,48 @@ class Payments
 
                     return null;
                 }
-                // Conservative wallet rule: one active topup per user, even with a new UUID.
-                if (DB::table('payments')->where('user_id', $userId)->where('kind', 'deposit')->whereNotIn('local_state', self::FINAL)->exists()) {
-                    throw ValidationException::withMessages(['reference' => 'Un dépôt attend déjà sa confirmation. Ne relancez pas le paiement.']);
+                // One active operation of each kind per user, even with a new UUID.
+                if (DB::table('payments')->where('user_id', $userId)->where('kind', $data['kind'])->whereNotIn('local_state', self::FINAL)->exists()) {
+                    throw ValidationException::withMessages(['reference' => $payout
+                        ? 'Un retrait attend déjà sa confirmation.' : 'Un dépôt attend déjà sa confirmation. Ne relancez pas le paiement.']);
+                }
+                if ($payout) {
+                    $recent = DB::table('payments')->where('user_id', $userId)->where('kind', 'withdraw')
+                        ->where('currency', $currency)->where('local_state', 'completed')
+                        ->where('confirmed_at', '>=', now()->subDay())->sum('amount');
+                    if ($data['amount'] < $beneficiary['min_amount'] || $data['amount'] > $beneficiary['max_amount']
+                        || $recent > $beneficiary['daily_limit'] - $data['amount']) {
+                        throw ValidationException::withMessages(['amount' => 'Plafond de retrait par opération ou sur 24 heures dépassé.']);
+                    }
                 }
                 if (! DB::table('payment_wallets')->where('user_id', $userId)->exists()) {
                     DB::table('payment_wallets')->insert(['user_id' => $userId, 'currency' => 'XAF', 'balance' => 0]);
                 }
-                $wallet = DB::table('payment_wallets')->where('user_id', $userId)->where('currency', \App\Modules\Money\Wallets::currency($userId))->lockForUpdate()->firstOrFail();
-                if ($wallet->currency !== $data['currency']) {
+                $wallet = DB::table('payment_wallets')->where('user_id', $userId)->where('currency', $currency)->lockForUpdate()->firstOrFail();
+                if ($wallet->currency !== $data['currency'] || ($payout && (int) $wallet->id !== $beneficiary['wallet_id'])) {
                     throw ValidationException::withMessages(['correspondent' => 'Cet opérateur ne correspond pas à la devise du portefeuille sélectionné.']);
                 }
                 $record = $data;
                 unset($record['msisdn']);
                 $id = DB::table('payments')->insertGetId([
                     ...$record, 'user_id' => $userId, 'provider' => 'ndsgpay', 'merchant_id' => Ndsgpay::merchantScope(),
-                    'business_type' => 'wallet_topup', 'business_id' => $data['reference'], 'fingerprint' => $fingerprint,
+                    'business_type' => $payout ? 'wallet_payout' : 'wallet_topup', 'business_id' => $data['reference'], 'fingerprint' => $fingerprint,
                     'phone_encrypted' => Crypt::encryptString($data['msisdn']), 'msisdn' => '[encrypted]',
-                    'correlation_id' => (string) Str::uuid(), 'active_key' => 'topup:'.$userId,
+                    'correlation_id' => (string) Str::uuid(), 'active_key' => ($payout ? 'payout:' : 'topup:').$userId,
                     'local_state' => 'initiating', 'status' => 'CREATING', 'initiated_at' => now(),
                     'created_at' => now(), 'updated_at' => now(),
                 ]);
+                if ($payout) {
+                    app(Ledger::class)->transfer($userId, (string) Str::uuid(), 'Retrait NDSGPay',
+                        $data['amount'], false, 'payment:'.$id, $id, 'reserve', $currency);
+                }
 
                 return DB::table('payments')->find($id);
             }, 3);
         } catch (UniqueConstraintViolationException $exception) {
             $prior = DB::table('payments')->where('reference', $data['reference'])->first();
             if (! $prior || $prior->user_id != $userId || ! $prior->fingerprint || ! hash_equals($prior->fingerprint, $fingerprint)) {
-                throw ValidationException::withMessages(['reference' => 'Référence ou dépôt actif déjà utilisé.']);
+                throw ValidationException::withMessages(['reference' => 'Référence ou opération active déjà utilisée.']);
             }
 
             return $prior;
@@ -94,32 +156,42 @@ class Payments
         }
         // Only the process that inserted the operation calls the provider. There is no queued POST retry.
         try {
-            $response = app(Ndsgpay::class)->request('POST', '/pay/deposits', [
+            $response = app(Ndsgpay::class)->request('POST', $payout ? '/pay/payouts' : '/pay/deposits', [
                 'amount' => Money::decimal((int) $payment->amount, $payment->currency), 'currency' => $payment->currency,
                 'correspondent' => $payment->correspondent, 'msisdn' => $data['msisdn'],
                 'description' => Ndsgpay::description('PredicAfrica'),
             ]);
-            if (! Ndsgpay::validId($response['depositId'] ?? null)) {
+            $providerId = $response[$payout ? 'payoutId' : 'depositId'] ?? null;
+            if (! Ndsgpay::validId($providerId)) {
                 throw new GatewayFailure('invalid_response');
             }
-            // Retain a usable provider ID even when another creation field is malformed.
-            DB::table('payments')->where('id', $payment->id)->update(['provider_id' => $response['depositId']]);
-            if (! in_array($response['status'] ?? null, ['INITIATED', 'SUBMITTED', 'COMPLETED', 'FAILED'], true)) {
-                throw new GatewayFailure('invalid_response');
-            }
-            DB::table('payments')->where('id', $payment->id)->update([
-                'provider_id' => $response['depositId'], 'provider_status' => $response['status'],
+            $validStatus = in_array($response['status'] ?? null, $payout ? self::PAYOUT_STATUSES : self::DEPOSIT_STATUSES, true);
+            DB::table('payments')->where('id', $payment->id)->whereNull('provider_id')->whereNotIn('local_state', self::FINAL)->update($validStatus ? [
+                'provider_id' => $providerId, 'provider_status' => $response['status'],
                 'local_state' => 'pending', 'status' => 'INITIATED', 'next_check_at' => now(), 'updated_at' => now(),
+            ] : [
+                'provider_id' => $providerId, 'local_state' => 'initiation_unknown', 'status' => 'UNKNOWN',
+                'error_code' => 'invalid_response', 'next_check_at' => now(), 'updated_at' => now(),
             ]);
-        } catch (GatewayFailure $exception) {
+            if (! $validStatus) {
+                $this->anomaly($payment->id, 'invalid_response');
+            }
+        } catch (GatewayFailure|UniqueConstraintViolationException $exception) {
             // Provider-side 400/401/403 are classified, but never silently retried or used to free funds.
             // Locally refused requests did not leave our process and are safe to close.
-            $unknown = $exception->sent;
-            DB::table('payments')->where('id', $payment->id)->update([
-                'local_state' => $unknown ? 'initiation_unknown' : 'failed', 'status' => $unknown ? 'UNKNOWN' : 'FAILED',
-                'active_key' => $unknown ? $payment->active_key : null, 'error_code' => $exception->reason, 'updated_at' => now(),
-            ]);
-            $this->anomaly($payment->id, $exception->reason);
+            $unknown = ! ($exception instanceof GatewayFailure) || $exception->sent;
+            $reason = $exception instanceof GatewayFailure ? $exception->reason : 'duplicate_provider_id';
+            DB::transaction(function () use ($payment, $unknown, $reason, $payout) {
+                DB::table('users')->where('id', $payment->user_id)->lockForUpdate()->firstOrFail();
+                $updated = DB::table('payments')->where('id', $payment->id)->whereNull('provider_id')->whereNotIn('local_state', self::FINAL)->update([
+                    'local_state' => $unknown ? 'initiation_unknown' : 'failed', 'status' => $unknown ? 'UNKNOWN' : 'FAILED',
+                    'active_key' => $unknown ? $payment->active_key : null, 'error_code' => $reason, 'updated_at' => now(),
+                ]);
+                if ($updated && $payout && ! $unknown) {
+                    $this->move($payment, 'release', (int) $payment->amount);
+                }
+                $this->anomaly($payment->id, $reason);
+            }, 3);
         }
 
         // A database/process crash after POST leaves 'initiating'. Recovery quarantines it; never resends.
@@ -178,9 +250,19 @@ class Payments
             || ($details['currency'] ?? null) !== $payment->currency) {
             throw new GatewayFailure('transaction_mismatch');
         }
-        $statuses = $deposit ? ['INITIATED', 'SUBMITTED', 'COMPLETED', 'FAILED'] : ['INITIATED', 'SUBMITTED', 'ACCEPTED', 'ENQUEUED', 'COMPLETED', 'FAILED'];
+        $statuses = $deposit ? self::DEPOSIT_STATUSES : self::PAYOUT_STATUSES;
         if (! in_array($details['status'] ?? null, $statuses, true)) {
             throw new GatewayFailure('unknown_status');
+        }
+        if ($payment->business_type === 'wallet_payout' && in_array($details['status'], ['COMPLETED', 'FAILED'], true)) {
+            try {
+                $phone = Crypt::decryptString($payment->phone_encrypted);
+            } catch (DecryptException) {
+                throw new GatewayFailure('beneficiary_unavailable');
+            }
+            if (($details['correspondent'] ?? null) !== $payment->correspondent || ($details['msisdn'] ?? null) !== $phone) {
+                throw new GatewayFailure('payout_beneficiary_mismatch');
+            }
         }
 
         return $details['status'];
@@ -265,6 +347,7 @@ class Payments
             throw new \LogicException('Invariant du portefeuille violé.');
         }
         if ($effect === 'release' && ! DB::table('payment_movements')->where('payment_id', $payment->id)
+            ->where('user_id', $payment->user_id)->where('currency', $payment->currency)
             ->where('effect', 'reserve')->where('amount', -$amount)->exists()) {
             throw new \LogicException('Réservation de retrait absente ou incohérente.');
         }

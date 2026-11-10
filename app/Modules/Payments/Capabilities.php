@@ -37,7 +37,20 @@ class Capabilities
             throw ValidationException::withMessages(['correspondent' => 'Couple pays/opérateur/devise non confirmé ou ambigu.']);
         }
         $capability = $matches[0];
-        $phone = $data['msisdn'] ?? '';
+        $phone = $this->normalizePhone($data['msisdn'] ?? '', $capability);
+        $amount = Money::minor($data['amount'] ?? null, $capability['currency']);
+        $settings = app(\App\Modules\Infrastructure\Settings::class)->current();
+        if ($amount < Money::minor($settings['min_amount'], $capability['currency'])
+            || $amount > Money::minor($settings['max_amount'], $capability['currency'])) {
+            throw ValidationException::withMessages(['amount' => 'Montant hors des limites autorisées.']);
+        }
+
+        return ['kind' => 'deposit', 'amount' => $amount, 'reference' => $data['reference'], 'correspondent' => $capability['correspondent'],
+            'msisdn' => $phone, 'currency' => $capability['currency'], 'country' => $capability['country']];
+    }
+
+    public function normalizePhone(mixed $phone, array $capability): string
+    {
         if (! is_string($phone) || ! preg_match('/\A\+?[0-9 ()-]+\z/D', trim($phone))) {
             throw ValidationException::withMessages(['msisdn' => 'Numéro Mobile Money invalide.']);
         }
@@ -67,16 +80,6 @@ class Capabilities
             || ! in_array(strlen($phone) - strlen($prefix), $capability['national_lengths'], true)) {
             throw ValidationException::withMessages(['msisdn' => 'Indicatif ou longueur incompatible avec le pays sélectionné.']);
         }
-        // Wallet topup is an explicitly authorized variable-amount business rule,
-        // not a browser-supplied order price. Currency and owner are server-derived.
-        $amount = Money::minor($data['amount'] ?? null, $capability['currency']);
-        $settings = app(\App\Modules\Infrastructure\Settings::class)->current();
-        if ($amount < Money::minor($settings['min_amount'], $capability['currency'])
-            || $amount > Money::minor($settings['max_amount'], $capability['currency'])) {
-            throw ValidationException::withMessages(['amount' => 'Montant hors des limites autorisées.']);
-        }
-
-        return ['kind' => 'deposit', 'amount' => $amount, 'reference' => $data['reference'], 'correspondent' => $capability['correspondent'],
-            'msisdn' => $phone, 'currency' => $capability['currency'], 'country' => $capability['country']];
+        return $phone;
     }
 }

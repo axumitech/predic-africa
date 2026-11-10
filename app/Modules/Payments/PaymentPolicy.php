@@ -18,8 +18,8 @@ class PaymentPolicy
 
     public function payout(User $user): bool
     {
-        // No dedicated payout permission, beneficiary approval or MFA flow exists yet.
-        return false;
+        return $this->deposit($user)
+            && app(PayoutBeneficiaries::class)->find($user->id, \App\Modules\Money\Wallets::currency($user->id)) !== null;
     }
 
     public function operate(User $user): bool

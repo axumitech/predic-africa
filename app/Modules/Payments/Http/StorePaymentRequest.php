@@ -2,7 +2,6 @@
 
 namespace App\Modules\Payments\Http;
 
-use App\Modules\Payments\Capabilities;
 use App\Modules\Payments\PaymentPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -18,11 +17,15 @@ class StorePaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'kind' => ['required', Rule::in(['deposit'])],
+            'kind' => ['required', Rule::in(['deposit', 'withdraw'])],
             'amount' => ['required'],
             'reference' => ['required', 'uuid'],
+            'currency' => ['exclude_unless:kind,withdraw', 'required', 'string', 'size:3'],
             'correspondent' => ['required', 'string', 'max:64'],
-            'msisdn' => ['required', 'string', 'max:32'],
+            'msisdn' => ['missing_if:kind,withdraw', 'required_if:kind,deposit', 'string', 'max:32'],
+            'country' => ['exclude_unless:kind,withdraw', 'missing'],
+            'beneficiary' => ['exclude_unless:kind,withdraw', 'required', 'string', 'size:64'],
+            'current_password' => ['exclude_unless:kind,withdraw', 'required', 'string', 'max:255'],
         ];
     }
 

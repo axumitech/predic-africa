@@ -11,8 +11,9 @@ return new class extends Migration
         Schema::table('users', fn (Blueprint $table) => $table->string('active_wallet_currency', 3)->nullable());
         foreach (['payment_wallets', 'accounts'] as $name) {
             Schema::table($name, function (Blueprint $table) {
-                $table->dropUnique(['user_id']);
+                // InnoDB needs a user_id index while the foreign key exists.
                 $table->unique(['user_id', 'currency']);
+                $table->dropUnique(['user_id']);
             });
         }
     }
@@ -27,8 +28,8 @@ return new class extends Migration
         }
         foreach (['payment_wallets', 'accounts'] as $name) {
             Schema::table($name, function (Blueprint $table) {
-                $table->dropUnique(['user_id', 'currency']);
                 $table->unique('user_id');
+                $table->dropUnique(['user_id', 'currency']);
             });
         }
         Schema::table('users', fn (Blueprint $table) => $table->dropColumn('active_wallet_currency'));

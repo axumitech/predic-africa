@@ -24,7 +24,7 @@ Pour reproduire localement avec MySQL déjà installé, initialiser un nouveau `
 PREDIC_TEST_MYSQL_SOCKET=/chemin/instance-test/mysql.sock php tests/concurrency/payments.php
 ```
 
-Même isolation que ci-dessus : base éphémère dédiée, appels prestataire entièrement simulés, socket explicite requis. Couvre double création avec même UUID (un seul POST), UUID différents sur un dépôt actif, double rapprochement GET, course inbox webhook contre rapprochement, et égalité soldes/journal. Chaque course prouve deux transactions en attente dans InnoDB. Les payouts sont fermés et ne sont pas présentés comme testés. Aucun secret réel nécessaire.
+Le script utilise une base éphémère dédiée, des appels prestataire simulés et un socket explicite. Il couvre la double création avec le même UUID, les UUID différents sur un dépôt actif, le double rapprochement GET, la course inbox webhook contre rapprochement et l’égalité soldes/journal. Pour les retraits, il vérifie une seule réservation et un seul POST sur deux demandes simultanées, puis une seule restitution sur deux rapprochements. Chaque course observe deux transactions en attente dans InnoDB.
 
 ## Compatibilité PostgreSQL
 

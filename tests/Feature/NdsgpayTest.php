@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Modules\Ledger\Ledger;
 use App\Modules\Payments\GatewayFailure;
 use App\Modules\Payments\Inbox;
 use App\Modules\Payments\Jobs\ProcessPayment;
@@ -10,6 +11,7 @@ use App\Modules\Payments\Ndsgpay;
 use App\Modules\Payments\Operations;
 use App\Modules\Payments\Outbox;
 use App\Modules\Payments\Payments;
+use App\Modules\Payments\PayoutBeneficiaries;
 use App\Modules\Payments\ProviderBudget;
 use App\Modules\Payments\Recovery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -392,6 +394,196 @@ class NdsgpayTest extends TestCase
         config(['payments.capabilities' => [['country' => 'COD', 'correspondent' => 'INVENTED', 'currency' => 'USD', 'calling_code' => '243', 'national_lengths' => [9]]]]);
         $this->post('/wallet/ndsgpay', $this->data(['correspondent' => 'INVENTED']))->assertSessionHasErrors('correspondent');
         Http::assertNothingSent();
+    }
+
+    private function payoutData(User $user, int $balance = 2000): array
+    {
+        config(['payments.payouts_enabled' => true, 'payments.payout_beneficiaries' => [$user->id => [
+            'currency' => 'XAF', 'country' => 'GAB', 'correspondent' => 'AIRTEL_GAB', 'msisdn' => '24177000000',
+            'min_amount' => '100', 'max_amount' => '1000', 'daily_limit' => '1500',
+        ]]]);
+        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', $balance, true));
+
+        return [
+            'kind' => 'withdraw', 'amount' => 1000, 'reference' => (string) Str::uuid(),
+            'currency' => 'XAF', 'correspondent' => 'AIRTEL_GAB',
+            'beneficiary' => app(PayoutBeneficiaries::class)->find($user->id, 'XAF')['token'],
+            'current_password' => 'password',
+        ];
+    }
+
+    #[DataProvider('payoutOutcomes')]
+    public function test_payout_reserves_before_post_and_reconciles_once(string $status, int $finalBalance): void
+    {
+        $user = User::factory()->create();
+        $data = $this->payoutData($user);
+        Http::fake([
+            '*/pay/payouts' => function ($request) {
+                $this->assertDatabaseHas('payment_wallets', ['balance' => 1000]);
+                $this->assertDatabaseHas('payment_movements', ['effect' => 'reserve', 'amount' => -1000]);
+                $this->assertSame('24177000000', $request['msisdn']);
+                $this->assertSame('AIRTEL_GAB', $request['correspondent']);
+                $this->assertSame('1000', $request['amount']);
+                $this->assertSame('XAF', $request['currency']);
+                $this->assertArrayNotHasKey('current_password', $request->data());
+
+                return Http::response(['success' => true, 'payoutId' => 'payout-1', 'status' => 'ENQUEUED']);
+            },
+            '*/payouts/payout-1' => Http::response(['success' => true, 'payout' => [
+                'payoutId' => 'payout-1', 'status' => $status, 'currency' => 'XAF', 'amount' => 1000,
+                'correspondent' => 'AIRTEL_GAB', 'msisdn' => '24177000000',
+            ]]),
+        ]);
+        $this->actingAs($user)->post('/wallet/ndsgpay', $data)->assertSessionHasNoErrors();
+        $this->post('/wallet/ndsgpay', $data)->assertSessionHasNoErrors();
+        $this->post('/wallet/ndsgpay', [...$data, 'reference' => (string) Str::uuid()])->assertSessionHasErrors('reference');
+        Http::assertSentCount(1);
+        $this->assertDatabaseHas('payments', ['kind' => 'withdraw', 'local_state' => 'pending', 'provider_id' => 'payout-1']);
+        $raw = json_encode(['event' => 'payout.updated', 'data' => ['payoutId' => 'payout-1', 'status' => $status]]);
+        $this->hook(raw: $raw)->assertOk();
+        $this->assertDatabaseHas('payment_wallets', ['balance' => 1000]);
+        $this->processInbox();
+        $this->processInbox();
+        Http::assertSentCount(2);
+        $this->assertDatabaseHas('payments', ['local_state' => strtolower($status), 'active_key' => null]);
+        $this->assertDatabaseHas('payment_wallets', ['balance' => $finalBalance]);
+        $this->assertDatabaseHas('accounts', ['user_id' => $user->id, 'balance' => $finalBalance]);
+        $this->assertSame($status === 'FAILED' ? 1 : 0, DB::table('payment_movements')->where('effect', 'release')->count());
+        $this->assertDatabaseCount('payment_outbox', 1);
+        if ($status === 'COMPLETED') {
+            $this->post('/wallet/ndsgpay', [...$data, 'reference' => (string) Str::uuid()])->assertSessionHasErrors('amount');
+            Http::assertSentCount(2);
+        }
+    }
+
+    public static function payoutOutcomes(): array
+    {
+        return ['completed' => ['COMPLETED', 1000], 'failed' => ['FAILED', 2000]];
+    }
+
+    public function test_payout_requires_password_current_beneficiary_and_available_funds(): void
+    {
+        $user = User::factory()->create();
+        $data = $this->payoutData($user, 500);
+        Http::fake();
+        $this->actingAs($user)->post('/wallet/ndsgpay', [...$data, 'current_password' => 'incorrect'])->assertSessionHasErrors('current_password');
+        $this->assertArrayNotHasKey('current_password', session()->getOldInput());
+        $this->post('/wallet/ndsgpay', [...$data, 'beneficiary' => str_repeat('0', 64)])->assertSessionHasErrors('beneficiary');
+        $this->post('/wallet/ndsgpay', $data)->assertSessionHasErrors('amount');
+        $this->get('/wallet')->assertInertia(fn ($page) => $page
+            ->where('ndsgpay.payout.last_digits', '0000')
+            ->missing('ndsgpay.payout.msisdn'));
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('payments', 0);
+    }
+
+    public function test_payout_releases_local_rejection_but_keeps_uncertain_provider_rejection_reserved(): void
+    {
+        $user = User::factory()->create();
+        $data = $this->payoutData($user);
+        Http::fake(['*/pay/payouts' => Http::response(['success' => false], 400)]);
+        app(ProviderBudget::class)->acquire('POST');
+        $this->actingAs($user)->post('/wallet/ndsgpay', $data)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('payments', ['reference' => $data['reference'], 'local_state' => 'failed', 'active_key' => null]);
+        $this->assertDatabaseHas('payment_wallets', ['balance' => 2000]);
+        Http::assertNothingSent();
+
+        DB::table('payment_rate_limits')->delete();
+        $data['reference'] = (string) Str::uuid();
+        $this->post('/wallet/ndsgpay', $data)->assertSessionHasNoErrors();
+        $this->post('/wallet/ndsgpay', $data)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('payments', ['reference' => $data['reference'], 'local_state' => 'initiation_unknown']);
+        $this->assertDatabaseHas('payment_wallets', ['balance' => 1000]);
+        Http::assertSentCount(1);
+    }
+
+    public function test_payout_is_bound_to_active_wallet_operator_and_beneficiary(): void
+    {
+        $user = User::factory()->create();
+        $xaf = $this->payoutData($user);
+        $existing = config('payments.payout_beneficiaries')[$user->id];
+        config([
+            'payments.payout_beneficiaries' => [$user->id => ['XAF' => $existing, 'CDF' => [
+                ...$existing, 'country' => 'COD', 'currency' => 'CDF', 'correspondent' => 'AIRTEL_COD', 'msisdn' => '243810000000',
+            ]]],
+            'payments.capabilities' => [...config('payments.capabilities'), [
+                'country' => 'COD', 'currency' => 'CDF', 'correspondent' => 'AIRTEL_COD', 'calling_code' => '243', 'national_lengths' => [9],
+            ]],
+        ]);
+        Http::fake([
+            '*/pay/payouts' => Http::response(['success' => true, 'payoutId' => 'payout-cdf', 'status' => 'INITIATED']),
+            '*/payouts/payout-cdf' => Http::response(['success' => true, 'payout' => [
+                'payoutId' => 'payout-cdf', 'status' => 'FAILED', 'amount' => '120.25', 'currency' => 'CDF',
+                'correspondent' => 'AIRTEL_COD', 'msisdn' => '243810000000',
+            ]]),
+        ]);
+        $this->actingAs($user)->post('/wallet/ndsgpay', [...$xaf, 'currency' => 'CDF'])->assertSessionHasErrors('currency');
+        $this->post('/wallet/ndsgpay', [...$xaf, 'correspondent' => 'AIRTEL_COD'])->assertSessionHasErrors('correspondent');
+        $this->post('/wallet/ndsgpay', [...$xaf, 'correspondent' => 'MOOV_GAB'])->assertSessionHasErrors('correspondent');
+        $this->post('/wallet/ndsgpay', [...$xaf, 'msisdn' => '24166000000'])->assertSessionHasErrors('msisdn');
+        $this->post('/wallet/ndsgpay', [...$xaf, 'country' => 'COD'])->assertSessionHasErrors('country');
+        $this->post('/wallets', ['currency' => 'CDF'])->assertSessionHasNoErrors();
+        DB::transaction(fn () => app(Ledger::class)->transfer($user->id, (string) Str::uuid(), 'Dépôt NDSGPay', 20000, true, currency: 'CDF'));
+        $this->post('/wallet/ndsgpay', $xaf)->assertSessionHasErrors('currency');
+        $cdf = [...$xaf, 'currency' => 'CDF', 'correspondent' => 'AIRTEL_COD', 'amount' => '120.25'];
+        $this->post('/wallet/ndsgpay', $cdf)->assertSessionHasErrors('beneficiary');
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('payments', 0);
+
+        $cdf['beneficiary'] = app(PayoutBeneficiaries::class)->find($user->id, 'CDF')['token'];
+        $this->post('/wallet/ndsgpay', $cdf)->assertSessionHasNoErrors();
+        Http::assertSent(fn ($request) => $request['currency'] === 'CDF' && $request['amount'] === '120.25'
+            && $request['correspondent'] === 'AIRTEL_COD' && $request['msisdn'] === '243810000000');
+        $this->assertDatabaseHas('payment_wallets', ['currency' => 'XAF', 'balance' => 2000]);
+        $this->assertDatabaseHas('payment_wallets', ['currency' => 'CDF', 'balance' => 7975]);
+
+        $this->post('/wallets/select', ['currency' => 'XAF'])->assertSessionHasNoErrors();
+        $this->assertTrue(app(Payments::class)->refresh(DB::table('payments')->sole()));
+        $this->assertDatabaseHas('payment_wallets', ['currency' => 'CDF', 'balance' => 20000]);
+        $this->assertDatabaseHas('payment_wallets', ['currency' => 'XAF', 'balance' => 2000]);
+    }
+
+    public function test_payout_rejects_operator_catalogue_mismatch_even_when_configuration_agrees(): void
+    {
+        $user = User::factory()->create();
+        $data = $this->payoutData($user);
+        config(['payments.capabilities' => [[
+            'country' => 'COG', 'currency' => 'XAF', 'correspondent' => 'AIRTEL_GAB', 'calling_code' => '242', 'national_lengths' => [9],
+        ]]]);
+        config(["payments.payout_beneficiaries.{$user->id}.country" => 'COG', "payments.payout_beneficiaries.{$user->id}.msisdn" => '242060000000']);
+        Http::fake();
+        $this->actingAs($user)->postJson('/wallet/ndsgpay', $data)->assertForbidden();
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('payments', 0);
+    }
+
+    #[DataProvider('payoutMismatches')]
+    public function test_payout_mismatch_at_provider_keeps_reservation(array $override, string $error): void
+    {
+        $user = User::factory()->create();
+        $data = $this->payoutData($user);
+        Http::fake([
+            '*/pay/payouts' => Http::response(['success' => true, 'payoutId' => 'payout-1', 'status' => 'INITIATED']),
+            '*/payouts/payout-1' => Http::response(['success' => true, 'payout' => [
+                'payoutId' => 'payout-1', 'status' => 'FAILED', 'amount' => 1000, 'currency' => 'XAF',
+                'correspondent' => 'AIRTEL_GAB', 'msisdn' => '24177000000', ...$override,
+            ]]),
+        ]);
+        $this->actingAs($user)->post('/wallet/ndsgpay', $data)->assertSessionHasNoErrors();
+        $this->assertFalse(app(Payments::class)->refresh(DB::table('payments')->sole()));
+        $this->assertDatabaseHas('payments', ['local_state' => 'pending', 'confirmed_at' => null, 'error_code' => $error]);
+        $this->assertDatabaseHas('payment_wallets', ['currency' => 'XAF', 'balance' => 1000]);
+        $this->assertDatabaseMissing('payment_movements', ['effect' => 'release']);
+    }
+
+    public static function payoutMismatches(): array
+    {
+        return [
+            'currency' => [['currency' => 'CDF'], 'transaction_mismatch'],
+            'operator' => [['correspondent' => 'MOOV_GAB'], 'payout_beneficiary_mismatch'],
+            'phone' => [['msisdn' => '24166000000'], 'payout_beneficiary_mismatch'],
+            'missing destination' => [['correspondent' => null, 'msisdn' => null], 'payout_beneficiary_mismatch'],
+        ];
     }
 
     public function test_invalid_amount_phone_configuration_and_access_are_rejected(): void

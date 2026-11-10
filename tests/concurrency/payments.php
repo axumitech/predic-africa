@@ -3,8 +3,10 @@
 // Explicit opt-in: only a caller-selected MySQL socket, and a database created
 // by this run. No .env database is migrated, cleared, or dropped.
 use App\Models\User;
+use App\Modules\Ledger\Ledger;
 use App\Modules\Payments\Inbox;
 use App\Modules\Payments\Payments;
+use App\Modules\Payments\PayoutBeneficiaries;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -40,9 +42,14 @@ function boot(string $socket, string $database): void
     Http::fake(function ($request) {
         DB::table('test_provider_calls')->insert(['method' => $request->method()]);
 
+        $payout = str_contains($request->url(), '/payouts');
+        $idKey = $payout ? 'payoutId' : 'depositId';
         return $request->method() === 'POST'
-            ? Http::response(['success' => true, 'depositId' => 'provider-'.Str::uuid(), 'status' => 'INITIATED'])
-            : Http::response(['success' => true, 'deposit' => ['depositId' => basename($request->url()), 'amount' => 1000, 'currency' => 'XAF', 'status' => 'COMPLETED']]);
+            ? Http::response(['success' => true, $idKey => 'provider-'.Str::uuid(), 'status' => 'INITIATED'])
+            : Http::response(['success' => true, ($payout ? 'payout' : 'deposit') => [
+                $idKey => basename($request->url()), 'amount' => 1000, 'currency' => 'XAF', 'status' => $payout ? 'FAILED' : 'COMPLETED',
+                'correspondent' => 'AIRTEL_GAB', 'msisdn' => '24177000000',
+            ]]);
     });
     DB::statement('SET SESSION innodb_lock_wait_timeout = 5');
 }
@@ -81,6 +88,13 @@ if (($argv[1] ?? '') === '--worker') {
         echo "READY\n";
         check(trim(fgets(STDIN)) === 'GO', 'Missing barrier.');
         if ($job['operation'] === 'create') {
+            if ($job['data']['kind'] === 'withdraw') {
+                config(['payments.payouts_enabled' => true, 'payments.payout_beneficiaries' => [$job['user'] => [
+                    'currency' => 'XAF', 'country' => 'GAB', 'correspondent' => 'AIRTEL_GAB', 'msisdn' => '24177000000',
+                    'min_amount' => '100', 'max_amount' => '1000', 'daily_limit' => '2000',
+                ]]]);
+                $job['data']['beneficiary'] = app(PayoutBeneficiaries::class)->find($job['user'], 'XAF')['token'];
+            }
             app(Payments::class)->create($job['user'], $job['data']);
         } elseif ($job['operation'] === 'inbox') {
             app(Inbox::class)->process($job['id']);
@@ -199,6 +213,32 @@ try {
     check(DB::table('payment_movements')->where('payment_id', $payment->id)->count() === 1, 'Race double credit.');
     check((int) DB::table('payment_wallets')->where('user_id', $other->id)->value('balance') === 1000, 'Race wrong balance.');
     echo "PASS webhook versus reconciliation: one financial effect (observed lock waits)\n";
+
+    DB::table('payment_rate_limits')->delete();
+    $withdrawer = User::factory()->create(['password' => 'isolated-payout-password']);
+    DB::transaction(fn () => app(Ledger::class)->transfer($withdrawer->id, (string) Str::uuid(), 'Dépôt NDSGPay', 1000, true));
+    $withdraw = ['operation' => 'create', 'user' => $withdrawer->id, 'data' => [
+        'kind' => 'withdraw', 'amount' => 1000, 'reference' => (string) Str::uuid(), 'current_password' => 'isolated-payout-password',
+        'currency' => 'XAF', 'correspondent' => 'AIRTEL_GAB',
+    ]];
+    $otherWithdrawal = $withdraw;
+    $otherWithdrawal['data']['reference'] = (string) Str::uuid();
+    $priorPosts = DB::table('test_provider_calls')->where('method', 'POST')->count();
+    $results = race([$withdraw, $otherWithdrawal], $control, 'users', $withdrawer->id);
+    sort($results);
+    check($results === ['ok', 'rejected'], 'Concurrent payouts were not serialized.');
+    $payment = DB::table('payments')->where('user_id', $withdrawer->id)->sole();
+    check(DB::table('test_provider_calls')->where('method', 'POST')->count() === $priorPosts + 1, 'Duplicate payout POST.');
+    check((int) DB::table('payment_wallets')->where('user_id', $withdrawer->id)->value('balance') === 0, 'Payout reservation failed.');
+    check(DB::table('payment_movements')->where('payment_id', $payment->id)->where('effect', 'reserve')->count() === 1, 'Duplicate payout reservation.');
+    echo "PASS concurrent payouts: one reservation and one POST (observed lock waits)\n";
+
+    $refresh = ['operation' => 'refresh', 'id' => $payment->id];
+    check(race([$refresh, $refresh], $control, 'payments', $payment->id) === ['ok', 'ok'], 'Concurrent payout refresh failed.');
+    check(DB::table('payment_movements')->where('payment_id', $payment->id)->where('effect', 'release')->count() === 1, 'Payout released twice or not at all.');
+    check((int) DB::table('payment_wallets')->where('user_id', $withdrawer->id)->value('balance') === 1000, 'Payout release failed.');
+    echo "PASS concurrent payout reconciliation: one release (observed lock waits)\n";
+
     check(DB::table('payment_wallets')->sum('balance') === DB::table('payment_movements')->sum('amount'), 'Financial journal mismatch.');
     echo "PASS wallet / immutable movement reconciliation\n";
 } finally {

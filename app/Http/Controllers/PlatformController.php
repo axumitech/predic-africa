@@ -101,9 +101,12 @@ class PlatformController extends Controller
         }
         if ($page === 'wallet') {
             $paymentSettings = app(\App\Modules\Infrastructure\Settings::class)->current();
-            $currency = \App\Modules\Money\Wallets::currency($user->id);
+            $currency = $activeCurrency;
+            $ready = app(\App\Modules\Payments\Ndsgpay::class)->ready();
+            $beneficiary = $ready && ! $paymentSettings['app_maintenance'] && app(\App\Modules\Payments\PaymentPolicy::class)->deposit($user)
+                ? app(\App\Modules\Payments\PayoutBeneficiaries::class)->find($user->id, $currency) : null;
             $data['ndsgpay'] = [
-                'enabled' => app(\App\Modules\Payments\Ndsgpay::class)->ready() && app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(),
+                'enabled' => $ready && app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(),
                 'maintenance_message' => $paymentSettings['maintenance_message'],
                 'min_amount' => $paymentSettings['min_amount'], 'max_amount' => $paymentSettings['max_amount'],
                 'scale' => \App\Modules\Money\Money::scale($currency),
@@ -111,7 +114,18 @@ class PlatformController extends Controller
                 'correspondents' => array_column(app(\App\Modules\Payments\Capabilities::class)->forAccount($user), 'correspondent'),
                 'correspondent_labels' => collect(app(\App\Modules\Payments\Capabilities::class)->forAccount($user))
                     ->mapWithKeys(fn ($capability) => [$capability['correspondent'] => (config('regions.countries.'.$capability['country'].'.name', $capability['country']).' — '.config('ndsgpay_operators.'.$capability['correspondent'].'.name', $capability['correspondent']).' (+'.$capability['calling_code'].')')])->all(),
-                'payoutsEnabled' => false,
+                'payoutsEnabled' => $beneficiary !== null,
+                'payout' => $beneficiary ? [
+                    'token' => $beneficiary['token'],
+                    'correspondent' => $beneficiary['correspondent'],
+                    'operator' => config('ndsgpay_operators.'.$beneficiary['correspondent'].'.name', $beneficiary['correspondent']),
+                    'country' => config('regions.countries.'.$beneficiary['country'].'.name', $beneficiary['country']),
+                    'last_digits' => substr($beneficiary['msisdn'], -4),
+                    'min_amount' => \App\Modules\Money\Money::decimal($beneficiary['min_amount'], $currency),
+                    'max_amount' => \App\Modules\Money\Money::decimal($beneficiary['max_amount'], $currency),
+                    'pending' => DB::table('payments')->where('user_id', $user->id)->where('kind', 'withdraw')
+                        ->whereNotIn('local_state', \App\Modules\Payments\Payments::FINAL)->exists(),
+                ] : null,
                 'balance' => (int) DB::table('payment_wallets')->where('user_id', $request->user()->id)->where('currency', $activeCurrency)->value('balance'),
                 'payments' => DB::table('payments')->where('user_id', $request->user()->id)->where('currency', $activeCurrency)->latest('id')->limit(30)
                     ->get(['id', 'reference', 'kind', 'amount', 'currency', 'status', 'local_state', 'created_at'])->map(function ($payment) { $payment->amount = (string) $payment->amount; return $payment; }),
@@ -125,7 +139,8 @@ class PlatformController extends Controller
                 'engaged' => (int) DB::table('positions')->where('user_id', $user->id)->where('wallet_currency', $activeCurrency)->where('status', 'open')->sum(DB::raw('COALESCE(wallet_stake, stake)')),
                 'gains' => (int) (clone $ledger)->where('kind', 'Gain')->sum('amount'),
                 'deposits' => (int) (clone $ledger)->where('kind', 'Dépôt NDSGPay')->sum('amount'),
-                'withdrawals' => (int) (clone $ledger)->where('kind', 'Retrait NDSGPay')->sum('amount'),
+                'withdrawals' => (int) DB::table('payments')->where('user_id', $user->id)->where('currency', $activeCurrency)
+                    ->where('kind', 'withdraw')->where('local_state', 'completed')->sum('amount'),
             ];
             $data['transactions'] = $ledger
                 ->when($filters['kind'] ?? null, fn ($q, $kind) => $q->where('kind', $kind))

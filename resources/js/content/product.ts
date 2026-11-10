@@ -6,7 +6,7 @@ export const product = {
             fixed: 'Les cotes sont fixes. Votre cote d’entrée est conservée jusqu’au résultat.',
             payout: 'Le retour potentiel inclut la mise et est arrondi au franc inférieur. Aucune commission de marché n’est appliquée actuellement.',
             resale: 'La mise reste engagée jusqu’à la résolution. La revente et la sortie anticipée ne sont pas disponibles.',
-            payments: 'Les dépôts passent par NDSGPay lorsque le service et votre opérateur sont activés. Le solde est crédité après confirmation. Les retraits ne sont pas disponibles actuellement.',
+            payments: 'Les dépôts passent par NDSGPay lorsque le service et votre opérateur sont activés. Le solde est crédité après confirmation. Les retraits sont réservés aux comptes autorisés disposant d’un bénéficiaire vérifié.',
             resolution: 'Les règles figurent sur chaque marché. Un administrateur enregistre le résultat et sa source ; une annulation rembourse les mises.',
             privacy: 'Le mot de passe est haché, les numéros de paiement sont chiffrés et vos opérations privées sont protégées par les contrôles d’accès du serveur.',
             region: 'Le portefeuille utilise XAF. Seuls les pays et opérateurs explicitement activés sont proposés lors du dépôt.',

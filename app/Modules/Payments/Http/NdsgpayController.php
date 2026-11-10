@@ -19,7 +19,9 @@ class NdsgpayController extends Controller
             'initiation_unknown', 'initiating' => 'Vérification nécessaire. Ne relancez pas le paiement. Référence : '.$payment->reference,
             'failed' => 'Opération non envoyée ou échec confirmé. Consultez son statut.',
             'completed' => 'Paiement déjà confirmé.',
-            default => 'Demande initiée. Confirmez sur votre téléphone. Le paiement attend sa vérification.',
+            default => $payment->kind === 'withdraw'
+                ? 'Retrait initié. Le montant est réservé pendant la vérification.'
+                : 'Demande initiée. Confirmez sur votre téléphone. Le paiement attend sa vérification.',
         });
     }
 

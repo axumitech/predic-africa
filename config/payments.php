@@ -1,6 +1,7 @@
 <?php
 
 $capabilities = json_decode(env('NDSGPAY_CAPABILITIES', '[]'), true);
+$payoutBeneficiaries = json_decode(env('NDSGPAY_PAYOUT_BENEFICIARIES', '{}'), true);
 
 return [
     'enabled' => env('NDSGPAY_ENABLED', false),
@@ -19,6 +20,6 @@ return [
     'capabilities' => is_array($capabilities) ? $capabilities : [],
     'min_amount' => 100,
     'max_amount' => 1000000,
-    // Technical payout support remains closed until a dedicated reviewed workflow exists.
-    'payouts_enabled' => false,
+    'payouts_enabled' => env('NDSGPAY_PAYOUTS_ENABLED', false),
+    'payout_beneficiaries' => is_array($payoutBeneficiaries) ? $payoutBeneficiaries : [],
 ];

@@ -123,7 +123,7 @@ export function ActionForm({ action, initial, fields, submit, children, freshRef
     </form><ConfirmationModal open={confirm} onClose={() => setConfirm(false)} onConfirm={send} busy={form.processing} confirmLabel="Valider définitivement" danger={action.endsWith('/resolve')}>
         <p>{submit}</p><dl className="p-confirm-summary">{fields.filter(f=>f.type!=='password').map(f=><div key={f.name}><dt>{f.label}</dt><dd>{f.options?.find(o=>o.value===form.data[f.name])?.label || form.data[f.name] || '—'}</dd></div>)}</dl>
         {typeof children === 'function' ? children(form.data) : children}
-        {action === '/wallet/ndsgpay' && <p>Cette opération transfère de l’argent réel en {auth?.wallet_currency || 'XAF'} via NDSGPay. Vérifiez le numéro et le montant.</p>}
+        {action === '/wallet/ndsgpay' && <p>Cette opération transfère de l’argent réel en {form.data.currency || auth?.wallet_currency || 'XAF'} via NDSGPay. Vérifiez le numéro et le montant.</p>}
     </ConfirmationModal></>;
 }
 export function MarketCards({ result, admin = false }: { result?: Pagination<Market>; admin?: boolean }) {

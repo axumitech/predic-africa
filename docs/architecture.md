@@ -14,7 +14,7 @@ L’ancien POST `/wallet` est supprimé. Aucun formulaire navigateur ne peut cr�
 
 ## Paiements et exploitation
 
-Voir [NDSGPay](ndsgpay.md) pour la signature, l’inbox durable, les confirmations GET, les quotas SQL, la reprise et les incidents. Les paiements réels nécessitent configuration explicite et activation ; les payouts restent fermés. La suppression de l’interface de démonstration n’active pas un compte prestataire.
+Les paiements réels nécessitent une configuration et une activation explicites. Les retraits sont désactivés par défaut et leur parcours pilote exige un bénéficiaire vérifié par compte. Voir [NDSGPay](ndsgpay.md) pour la configuration, la signature, le rapprochement et les incidents.
 
 ## Migration de l’existant
 
