@@ -87,8 +87,12 @@ class PlatformController extends Controller
             abort_unless($market, 404);
             Gate::authorize('view-market', $market);
             $data['market'] = $market;
+            if ($data['adminView'] && $market->status === 'pending') {
+                $data['marketReviewVersion'] = \App\Modules\Markets\MarketDraft::revision($market);
+            }
             $data['volume'] = (int) DB::table('positions')->where('market_id', $id)->sum('stake');
             $data['participants'] = DB::table('positions')->where('market_id', $id)->distinct()->count('user_id');
+            $data['marketHistory'] = fn () => app(\App\Modules\Markets\MarketHistory::class)->forMarket($market);
         }
         if ($page === 'positions') {
             $filters = $request->validate(['q' => 'nullable|string|max:100', 'status' => 'nullable|in:open,won,lost,refunded']);
@@ -103,8 +107,8 @@ class PlatformController extends Controller
             $paymentSettings = app(\App\Modules\Infrastructure\Settings::class)->current();
             $currency = $activeCurrency;
             $ready = app(\App\Modules\Payments\Ndsgpay::class)->ready();
-            $beneficiary = $ready && ! $paymentSettings['app_maintenance'] && app(\App\Modules\Payments\PaymentPolicy::class)->deposit($user)
-                ? app(\App\Modules\Payments\PayoutBeneficiaries::class)->find($user->id, $currency) : null;
+            $payoutOptions = $ready && ! $paymentSettings['app_maintenance'] && app(\App\Modules\Payments\PaymentPolicy::class)->payout($user)
+                ? app(\App\Modules\Payments\PayoutOptions::class)->forWallet($user->id, $currency) : null;
             $data['ndsgpay'] = [
                 'enabled' => $ready && app(\App\Modules\Infrastructure\Settings::class)->acceptingDeposits(),
                 'maintenance_message' => $paymentSettings['maintenance_message'],
@@ -114,21 +118,18 @@ class PlatformController extends Controller
                 'correspondents' => array_column(app(\App\Modules\Payments\Capabilities::class)->forAccount($user), 'correspondent'),
                 'correspondent_labels' => collect(app(\App\Modules\Payments\Capabilities::class)->forAccount($user))
                     ->mapWithKeys(fn ($capability) => [$capability['correspondent'] => (config('regions.countries.'.$capability['country'].'.name', $capability['country']).' — '.config('ndsgpay_operators.'.$capability['correspondent'].'.name', $capability['correspondent']).' (+'.$capability['calling_code'].')')])->all(),
-                'payoutsEnabled' => $beneficiary !== null,
+                'payoutsEnabled' => $payoutOptions !== null,
                 'payout_unavailable_message' => match (true) {
                     ! config('payments.payouts_enabled') => 'Les retraits Mobile Money ne sont pas encore ouverts.',
                     ! $ready || $paymentSettings['app_maintenance'] => 'Le service de retrait est temporairement indisponible.',
-                    $beneficiary === null => 'Aucun bénéficiaire Mobile Money vérifié n’est autorisé pour ce portefeuille.',
+                    $payoutOptions === null => 'Les retraits Mobile Money ne sont pas configurés pour cette devise.',
                     default => null,
                 },
-                'payout' => $beneficiary ? [
-                    'token' => $beneficiary['token'],
-                    'correspondent' => $beneficiary['correspondent'],
-                    'operator' => config('ndsgpay_operators.'.$beneficiary['correspondent'].'.name', $beneficiary['correspondent']),
-                    'country' => config('regions.countries.'.$beneficiary['country'].'.name', $beneficiary['country']),
-                    'last_digits' => substr($beneficiary['msisdn'], -4),
-                    'min_amount' => \App\Modules\Money\Money::decimal($beneficiary['min_amount'], $currency),
-                    'max_amount' => \App\Modules\Money\Money::decimal($beneficiary['max_amount'], $currency),
+                'payout' => $payoutOptions ? [
+                    'token' => $payoutOptions['token'],
+                    'correspondents' => array_keys($payoutOptions['operators']),
+                    'min_amount' => \App\Modules\Money\Money::decimal($payoutOptions['min_amount'], $currency),
+                    'max_amount' => \App\Modules\Money\Money::decimal($payoutOptions['max_amount'], $currency),
                     'pending' => DB::table('payments')->where('user_id', $user->id)->where('kind', 'withdraw')
                         ->whereNotIn('local_state', \App\Modules\Payments\Payments::FINAL)->exists(),
                 ] : null,
@@ -206,6 +207,11 @@ class PlatformController extends Controller
             })->values();
         }
         if (in_array($page, ['predictions', 'admin-pipeline'])) {
+            if ($page === 'admin-pipeline') {
+                $data['reviewQueue'] = DB::table('markets')->whereNotNull('pipeline_source')->where('status', 'pending')
+                    ->where('closes_at', '>', now())->orderBy('closes_at')->limit(100)
+                    ->get(['id', 'title', 'category', 'closes_at']);
+            }
             try {
                 $data['pipeline'] = app(PipelineClient::class)->read($page === 'admin-pipeline' ? 'markets' : 'predictions', null);
             } catch (\Throwable $exception) {

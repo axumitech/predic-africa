@@ -20,9 +20,17 @@ class MarketController extends Controller
     public function moderate(Request $request, int $id, MarketWorkflow $markets)
     {
         Gate::authorize('admin');
-        $data = $request->validate(['status' => ['required', Rule::in(['open', 'rejected'])]]);
-        $markets->moderate($request->user()->id, $id, $data['status']);
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['pending', 'open', 'rejected'])],
+            'revision' => ['nullable', 'string', 'size:64'],
+        ]);
+        $draft = $data['status'] === 'rejected' ? [] : $request->only(['title', 'description', 'category', 'closes_at', 'yes_odds', 'no_odds']);
+        $markets->moderate($request->user()->id, $id, $data['status'], $draft, $data['revision'] ?? null);
 
-        return back()->with('success', 'Modération enregistrée.');
+        return back()->with('success', match ($data['status']) {
+            'pending' => 'Brouillon modifié.',
+            'open' => 'Modération enregistrée. Marché publié.',
+            default => 'Marché rejeté.',
+        });
     }
 }

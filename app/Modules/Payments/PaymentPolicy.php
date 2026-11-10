@@ -18,8 +18,7 @@ class PaymentPolicy
 
     public function payout(User $user): bool
     {
-        return $this->deposit($user)
-            && app(PayoutBeneficiaries::class)->find($user->id, \App\Modules\Money\Wallets::currency($user->id)) !== null;
+        return $this->deposit($user) && config('payments.payouts_enabled');
     }
 
     public function operate(User $user): bool

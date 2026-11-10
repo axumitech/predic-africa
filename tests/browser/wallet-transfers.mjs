@@ -15,8 +15,7 @@ const env = { ...process.env, APP_ENV: 'testing', APP_DEBUG: 'false', LOG_CHANNE
     NDSGPAY_ENABLED: 'true', NDSGPAY_SECRET_KEY: 'isolated-test-key', NDSGPAY_WEBHOOK_SECRET: 'isolated-test-hook',
     NDSGPAY_BASE_URL: 'https://ndsgpay-test.invalid/api', NDSGPAY_PAYOUTS_ENABLED: 'true',
     NDSGPAY_CAPABILITIES: JSON.stringify([{ country: 'COD', currency: 'CDF', correspondent: 'AIRTEL_COD', calling_code: '243', national_lengths: [9] }]),
-    NDSGPAY_PAYOUT_BENEFICIARIES: JSON.stringify({ 1: { CDF: { country: 'COD', currency: 'CDF', correspondent: 'AIRTEL_COD',
-        msisdn: '243810000123', min_amount: '100', max_amount: '10000', daily_limit: '15000' } } }) };
+    NDSGPAY_PAYOUT_LIMITS: JSON.stringify({ CDF: { min_amount: '100', max_amount: '10000', daily_limit: '15000' } }) };
 const php = args => { const r = spawnSync('php', args, { env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stdout + r.stderr); };
 php(['artisan', 'migrate', '--force']);
 php(['tests/browser/wallet-transfers-fixtures.php']);
@@ -90,14 +89,21 @@ try {
     await page.getByRole('group', { name: 'Actions du portefeuille CDF' }).getByRole('button', { name: 'Retirer', exact: true }).click();
     await page.getByRole('heading', { name: 'Retirer depuis mon portefeuille CDF', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).waitFor();
-    await page.getByText(/Airtel Money · •••• 0123/).waitFor();
+    await page.getByLabel('Pays et opérateur du bénéficiaire').selectOption('AIRTEL_COD');
+    await page.getByLabel('Numéro Mobile Money du bénéficiaire').fill('0810000123');
+    await page.getByRole('spinbutton', { name: 'Montant en CDF', exact: true }).fill('120.25');
+    await page.getByLabel('Mot de passe PredicAfrica', { exact: true }).fill('transfer-password-123');
+    await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).click();
+    const payoutDialog = page.getByRole('dialog');
+    await payoutDialog.getByText('0810000123', { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
     assert.equal(await page.getByRole('button', { name: 'Continuer le dépôt', exact: true }).count(), 0);
     await page.getByRole('button', { name: 'Portefeuille précédent', exact: true }).click();
     await page.getByText('Portefeuille sélectionné.', { exact: true }).waitFor();
     assert.equal(await page.locator('.p-wallet-summary .p-balance-card').count(), 0);
     const actions = page.getByRole('group', { name: 'Actions du portefeuille XAF' });
     await actions.getByRole('button', { name: 'Retirer' }).click();
-    await page.getByText('Aucun bénéficiaire Mobile Money vérifié n’est autorisé pour ce portefeuille.', { exact: true }).waitFor();
+    await page.getByText('Les retraits Mobile Money ne sont pas configurés pour cette devise.', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).count(), 0);
     await actions.getByRole('button', { name: 'Déposer', exact: true }).click();
     await page.getByRole('heading', { name: 'Alimenter mon portefeuille', exact: true }).waitFor();
@@ -142,6 +148,23 @@ try {
     await page.getByText('Marché de test du portefeuille actif', { exact: true }).waitFor();
     assert.match(await page.locator('.p-market-minimum').innerText(), /400,00 CDF/);
     assert.match(await page.locator('.p-market-facts').innerText(), /CDF/);
+    await page.getByRole('link', { name: 'Marché de test du portefeuille actif', exact: true }).click();
+    const history = page.locator('.p-market-history');
+    await history.getByRole('heading', { name: 'Évolution du marché' }).waitFor();
+    const scrubber = history.getByRole('slider', { name: 'Parcourir l’historique du marché' });
+    assert.match(await scrubber.getAttribute('aria-valuetext'), /Oui 40 %, Non 60 %/);
+    await scrubber.press('Home');
+    assert.match(await scrubber.getAttribute('aria-valuetext'), /Oui 100 %, Non 0 %/);
+    assert.equal(await history.locator('.p-market-history-line').count(), 2);
+    const plotBox = await history.locator('.p-market-history-plot svg').boundingBox();
+    const scrubberBox = await scrubber.boundingBox();
+    assert.ok(plotBox.y + plotBox.height <= scrubberBox.y, 'Chart overlaps its timeline control');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+    await scrubber.press('End');
+    await scrubber.blur();
+    await history.screenshot({ path: 'test-results/wallet-transfers/market-history-mobile.png' });
+    await page.goto(base + '/markets');
+    await page.getByText('Marché de test du portefeuille actif', { exact: true }).waitFor();
     assert.equal(await page.locator('.app-header__actions a[href="/notifications"], .app-header__actions a[href="/profile"]').count(), 0);
     await page.getByLabel('Changer de portefeuille', { exact: true }).selectOption('XAF');
     await page.getByText('Portefeuille sélectionné.', { exact: true }).waitFor();

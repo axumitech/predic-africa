@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Modules\Markets\MarketDraft;
 use App\Modules\Markets\MarketWorkflow;
+use App\Modules\Predictions\Infrastructure\OfficialAfricanCalendars;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +28,131 @@ class MarketsPredictionsTest extends TestCase
         parent::setUp();
         config(['predictions.enabled' => true]);
         Http::preventStrayRequests();
+    }
+
+    private function fakeOfficialCalendars(int $kickoffHour = 16, int $unionStatus = 200): void
+    {
+        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::preventStrayRequests();
+        $articlePath = '/fr/can2025/infos/programme-can/';
+        $schedule = <<<HTML
+            <article><time>mardi, 03 novembre 2026</time>
+            <p>PROGRAMME DE LA 3E JOURNÉE (TOUS LES HORAIRES EN GMT)</p>
+            <p>• Groupe E : RD Congo – Sierra Leone (12/11, {$kickoffHour}h00)</p>
+            <p>• Groupe F : Match erroné – Autre équipe (31/11, 16h00)</p>
+            </article>
+            HTML;
+        $union = <<<'HTML'
+            <h1>Upcoming News &amp; Events</h1>
+            <div class="views-row">
+              <div class="views-field-field-short-title"><a href="/en/newsevents/20261113/executive-council">Extraordinary Session of the Executive Council</a></div>
+              <div class="views-field-field-date"><time datetime="2026-11-13T06:00:00Z">13 November 2026</time></div>
+            </div>
+            <div class="views-row">
+              <div class="views-field-field-short-title"><a href="/en/newsevents/20261116/youth-forum">Pan-African Youth Forum</a></div>
+              <div class="views-field-field-date"><time datetime="2026-11-16T06:00:00Z">16 November 2026</time></div>
+            </div>
+            HTML;
+        Http::fake([
+            OfficialAfricanCalendars::CAF.'*' => Http::response(['items' => [
+                ['title' => 'Éliminatoires de la CAN 2027', 'url' => $articlePath, 'date' => '2026-11-03T00:00:00Z'],
+                ['title' => 'Éliminatoires de la CAN 2027', 'url' => 'https://foreign.example/calendar', 'date' => '2026-11-03T00:00:00Z'],
+            ]]),
+            'https://www.cafonline.com'.$articlePath => Http::response($schedule),
+            OfficialAfricanCalendars::AU => Http::response($union, $unionStatus),
+            OfficialAfricanCalendars::SARB => Http::response('<table><tr><th>2026/11/19&nbsp;-&nbsp;15:00</th><td>19 November 2026 press conference of the Monetary Policy Committee</td></tr></table>'),
+        ]);
+    }
+
+    public function test_african_suggestions_notify_admins_and_require_review_before_publication(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-11-10T12:00:00Z'));
+        $this->fakeOfficialCalendars();
+        config(['predictions.enabled' => false]);
+        $admin = User::factory()->create(['role' => 'admin', 'notifications_enabled' => false]);
+        $reviewer = User::factory()->create(['role' => 'superadmin']);
+        $trader = User::factory()->create();
+        $suspended = User::factory()->create(['role' => 'admin', 'suspended' => true]);
+        $this->actingAs($trader)->postJson('/admin/pipeline/generate-africa')->assertForbidden();
+
+        $this->actingAs($admin)->post('/admin/pipeline/generate-africa')->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing(['Sport', 'Économie', 'Politique', 'Société'],
+            DB::table('markets')->where('status', 'pending')->distinct()->pluck('category')->all());
+        $count = DB::table('markets')->count();
+        $this->post('/admin/pipeline/generate-africa')->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('markets', $count);
+        $this->assertDatabaseCount('platform_notifications', $count * 2);
+        $market = DB::table('markets')->where('pipeline_source', 'africa:caf-2027-3-rd-congo-sierra-leone')->sole();
+        $this->assertSame('2026-11-12 15:55:00', $market->source_closes_at);
+        $this->assertStringContainsString('https://www.cafonline.com/', $market->description);
+        $this->assertDatabaseHas('platform_notifications', ['user_id' => $reviewer->id, 'market_id' => $market->id]);
+        $this->assertDatabaseMissing('platform_notifications', ['user_id' => $suspended->id, 'market_id' => $market->id]);
+        $this->actingAs($trader)->get("/markets/$market->id")->assertForbidden();
+        $this->postJson("/admin/markets/$market->id/moderate", ['status' => 'open'])->assertForbidden();
+        $this->actingAs($reviewer)->postJson("/admin/markets/$market->id/moderate", ['status' => 'open'])
+            ->assertUnprocessable()->assertJsonValidationErrors('operation');
+
+        $draft = [
+            'revision' => MarketDraft::revision($market),
+            'title' => 'La RD Congo gagnera-t-elle le match contre la Sierra Leone ?',
+            'description' => $market->description, 'category' => $market->category,
+            'closes_at' => $market->closes_at, 'yes_odds' => 175, 'no_odds' => 230,
+        ];
+        $this->post("/admin/markets/$market->id/moderate", ['status' => 'pending', ...$draft])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('markets', ['id' => $market->id, 'status' => 'pending', 'title' => $draft['title'], 'yes_odds' => 175]);
+        $this->postJson("/admin/markets/$market->id/moderate", ['status' => 'open', ...$draft])
+            ->assertUnprocessable()->assertJsonValidationErrors('operation');
+
+        $draft['revision'] = MarketDraft::revision(DB::table('markets')->find($market->id));
+        $this->postJson("/admin/markets/$market->id/moderate", ['status' => 'open', ...$draft, 'closes_at' => '2026-11-12T17:00:00Z'])
+            ->assertUnprocessable()->assertJsonValidationErrors('closes_at');
+        $this->post("/admin/markets/$market->id/moderate", ['status' => 'open', ...$draft, 'yes_odds' => 180])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('markets', ['id' => $market->id, 'status' => 'open', 'yes_odds' => 180]);
+        $this->actingAs($trader)->get("/markets/$market->id")->assertOk();
+    }
+
+    public function test_generation_filters_domains_and_skips_past_events(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-11-14T12:00:00Z'));
+        $this->fakeOfficialCalendars();
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $this->post('/admin/pipeline/generate-africa', ['category' => 'Sport'])->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('markets', 0);
+        $this->post('/admin/pipeline/generate-africa', ['category' => 'Économie'])->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('markets', 1);
+        $this->assertDatabaseHas('markets', ['category' => 'Économie', 'status' => 'pending', 'source_closes_at' => '2026-11-19 12:55:00']);
+    }
+
+    public function test_discovery_command_survives_a_source_failure_and_never_publishes(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-11-10T12:00:00Z'));
+        $this->fakeOfficialCalendars(unionStatus: 503);
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->artisan('markets:discover-africa', ['--dry-run' => true])->expectsOutputToContain('Union africaine')->assertFailed();
+        $this->assertDatabaseCount('markets', 0);
+        $this->artisan('markets:discover-africa')->expectsOutputToContain('Union africaine')->assertFailed();
+        $this->assertDatabaseCount('markets', 2);
+        $this->assertSame(2, DB::table('markets')->where('status', 'pending')->where('creator_id', $admin->id)->count());
+        $this->assertDatabaseCount('platform_notifications', 2);
+    }
+
+    public function test_official_date_moving_earlier_tightens_cutoff_without_overwriting_edits(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-11-10T12:00:00Z'));
+        $this->fakeOfficialCalendars();
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin)->post('/admin/pipeline/generate-africa', ['category' => 'Sport'])->assertSessionHasNoErrors();
+        DB::table('markets')->update(['title' => 'Question déjà relue par un administrateur ?']);
+        $this->fakeOfficialCalendars(kickoffHour: 15);
+        $this->post('/admin/pipeline/generate-africa', ['category' => 'Sport'])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('markets', 1);
+        $this->assertDatabaseCount('platform_notifications', 1);
+        $this->assertDatabaseHas('markets', [
+            'title' => 'Question déjà relue par un administrateur ?', 'source_closes_at' => '2026-11-12 14:55:00',
+            'closes_at' => '2026-11-12 15:55:00', 'status' => 'pending',
+        ]);
     }
 
     public function test_import_bypasses_display_cache_and_never_imports_expired_or_inactive_suggestions(): void

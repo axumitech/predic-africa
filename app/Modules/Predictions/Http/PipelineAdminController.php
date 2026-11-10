@@ -3,15 +3,31 @@
 namespace App\Modules\Predictions\Http;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Predictions\AfricanMarketSuggestions;
 use App\Modules\Predictions\ImportSuggestion;
 use App\Modules\Predictions\Infrastructure\PipelineClient;
 use App\Modules\Predictions\Infrastructure\PipelineUnavailable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 
 class PipelineAdminController extends Controller
 {
+    public function generateAfrican(Request $request, AfricanMarketSuggestions $suggestions)
+    {
+        Gate::authorize('admin');
+        $data = $request->validate(['category' => ['nullable', Rule::in(['Sport', 'Économie', 'Politique', 'Société'])]]);
+        $result = $suggestions->generate($request->user()->id, $data['category'] ?? null);
+        $count = $result['created'];
+        $message = $count === 0 ? 'Aucun nouveau brouillon disponible.' : "Brouillons à valider créés ($count). Les administrateurs ont été notifiés.";
+        if ($result['unavailable'] !== []) {
+            $message .= ' Sources indisponibles · '.implode(', ', $result['unavailable']).'.';
+        }
+
+        return back()->with('success', $message);
+    }
+
     public function generate(Request $request, PipelineClient $client)
     {
         Gate::authorize('admin');

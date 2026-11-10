@@ -21,6 +21,8 @@ export type Market = {
     no_odds: number;
     result: string | null;
     resolution_source: string | null;
+    pipeline_source?: string | null;
+    source_closes_at?: string | null;
     volume?: number;
     participants?: number;
     creator_name?: string;

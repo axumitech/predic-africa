@@ -14,7 +14,7 @@ L’ancien POST `/wallet` est supprimé. Aucun formulaire navigateur ne peut cr�
 
 ## Paiements et exploitation
 
-Les paiements réels nécessitent une configuration et une activation explicites. Les retraits sont désactivés par défaut et leur parcours pilote exige un bénéficiaire vérifié par compte. Voir [NDSGPay](ndsgpay.md) pour la configuration, la signature, le rapprochement et les incidents.
+Les paiements réels nécessitent une configuration et une activation explicites. Les retraits sont désactivés par défaut et exigent des limites configurées pour la devise du portefeuille. Voir [NDSGPay](ndsgpay.md) pour la configuration, la signature, le rapprochement et les incidents.
 
 ## Migration de l’existant
 
@@ -25,6 +25,10 @@ Effectuer cette migration en maintenance, après sauvegarde. Son rollback automa
 ## Prédictions
 
 L’ancien service Python produisait des scores aléatoires. Il est retiré de `services/` et conservé dans `legacy/retired-ai/`. Le connecteur Laravel reste disponible pour un futur service réel, désactivé par défaut ; il exige explicitement `simulation=false`, y compris pour la génération et les réponses cachées. Les sources déclarées synthétiques ou non qualifiées sont refusées. Les propositions importées restent soumises aux validations et à la modération ; aucune donnée fictive n’est publiée automatiquement.
+
+Le planificateur Laravel consulte toutes les six heures les programmes des qualifications de la CAN publiés par la CAF, le calendrier de l’Union africaine et celui des décisions de politique monétaire de la banque centrale sud-africaine. L’espace **Pipeline IA** permet aussi de lancer la collecte. La commande `php artisan markets:discover-africa --dry-run` vérifie les sources en lecture seule. Une source indisponible ne bloque pas les autres.
+
+Le générateur transforme les événements futurs en brouillons Oui / Non, conserve l’annonce et la source de résolution, et déduplique les événements déjà traités. Chaque nouveau brouillon ou import déclenche une notification dans l’application pour les administrateurs actifs. Ils peuvent modifier les règles, l’échéance et les cotes avant de confirmer la publication. La clôture des mises ne peut pas dépasser la limite issue du calendrier officiel. Les cotes initiales sont indicatives et doivent être revues à la validation.
 
 ## Tests
 

@@ -89,6 +89,34 @@ class PlatformTest extends TestCase
         $this->post('/login', ['email' => $user->email, 'password' => 'test-password-123'])->assertRedirect('/dashboard');
     }
 
+    public function test_market_history_tracks_cumulative_stakes_through_closing(): void
+    {
+        $this->freezeSecond();
+        $user = $this->user();
+        $start = now()->timestamp;
+        $market = $this->market($user);
+        $this->deposit($user);
+        $this->get("/markets/$market")->assertInertia(fn (Assert $page) => $page
+            ->where('marketHistory.start', $start)->has('marketHistory.points', 0));
+
+        $this->travel(10)->minutes();
+        $first = now()->timestamp;
+        $this->bet($user, $market, 200)->assertSessionHasNoErrors();
+        $this->travel(10)->minutes();
+        $second = now()->timestamp;
+        $this->post("/markets/$market/positions", [
+            'outcome' => 'no', 'amount' => 300, 'reference' => (string) Str::uuid(),
+        ])->assertSessionHasNoErrors();
+        $this->travel(2)->days();
+
+        $this->get("/markets/$market")->assertInertia(fn (Assert $page) => $page
+            ->where('marketHistory.start', $start)->where('marketHistory.end', $start + 86400)
+            ->has('marketHistory.points', 2)
+            ->where('marketHistory.points.0', ['at' => $first, 'yes' => 100])
+            ->where('marketHistory.points.1', ['at' => $second, 'yes' => 40])
+            ->where('market.yes_odds', 235)->where('market.no_odds', 170));
+    }
+
     public function test_private_pages_require_login_and_admin_permissions_are_server_side(): void
     {
         $this->get('/wallet')->assertRedirect('/login');

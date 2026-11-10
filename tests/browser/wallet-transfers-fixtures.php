@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use App\Modules\Ledger\Ledger;
+use App\Modules\Trading\PlacePosition;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -20,6 +21,12 @@ DB::table('accounts')->insert(['user_id' => $user->id, 'code' => "historical-cdf
 DB::table('fx_snapshots')->insert(['provider' => config('fx.provider'), 'base_currency' => 'XAF',
     'rates' => json_encode(['XAF' => '1', 'CDF' => '4']), 'as_of' => now(), 'fetched_at' => now()]);
 
-DB::table('markets')->insert(['creator_id' => $user->id, 'title' => 'Marché de test du portefeuille actif',
+$market = DB::table('markets')->insertGetId(['creator_id' => $user->id, 'title' => 'Marché de test du portefeuille actif',
     'description' => 'Un marché isolé pour vérifier les devises affichées.', 'category' => 'Sport', 'status' => 'open',
-    'yes_odds' => 200, 'no_odds' => 200, 'closes_at' => now()->addDay(), 'created_at' => now(), 'updated_at' => now()]);
+    'yes_odds' => 200, 'no_odds' => 200, 'closes_at' => now()->addDay(), 'created_at' => now()->subHours(2), 'updated_at' => now()]);
+
+$participant = User::factory()->create();
+DB::transaction(fn () => app(Ledger::class)->transfer($participant->id, (string) Str::uuid(), 'Dépôt NDSGPay', 1000, true));
+app(PlacePosition::class)->place($participant->id, $market, 'yes', 200, (string) Str::uuid());
+app(PlacePosition::class)->place($participant->id, $market, 'no', 300, (string) Str::uuid());
+DB::table('positions')->where('market_id', $market)->where('outcome', 'yes')->update(['created_at' => now()->subHour()]);

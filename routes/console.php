@@ -9,6 +9,8 @@ use App\Modules\Payments\Ndsgpay;
 use App\Modules\Payments\Operations;
 use App\Modules\Payments\Payments;
 use App\Modules\Payments\Recovery;
+use App\Modules\Predictions\AfricanMarketSuggestions;
+use App\Modules\Predictions\Infrastructure\OfficialAfricanCalendars;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -102,6 +104,32 @@ Artisan::command('payments:audit', function (Payments $payments) {
 })->purpose('Vérifier les soldes réels contre le journal sans modifier les fonds');
 
 Schedule::command('payments:audit')->hourly()->withoutOverlapping();
+
+Artisan::command('markets:discover-africa {--dry-run}', function (AfricanMarketSuggestions $suggestions, OfficialAfricanCalendars $calendars) {
+    if ($this->option('dry-run')) {
+        $result = $calendars->discover();
+        $this->info(count($result['events']).' événements à venir lus dans les sources officielles.');
+        foreach ($result['events'] as $event) {
+            $this->line($event['category'].' · '.$event['title']);
+        }
+    } else {
+        $actorId = User::whereIn('role', ['admin', 'superadmin'])->where('suspended', false)->orderBy('id')->value('id');
+        if ($actorId === null) {
+            $this->error('Aucun administrateur actif pour recevoir les brouillons.');
+
+            return 1;
+        }
+        $result = $suggestions->generate((int) $actorId);
+        $this->info($result['created'].' brouillons à valider créés.');
+    }
+    if ($result['unavailable'] !== []) {
+        $this->warn('Sources indisponibles · '.implode(', ', $result['unavailable']));
+    }
+
+    return $result['unavailable'] === [] ? 0 : 1;
+})->purpose('Importer les événements africains officiels sous forme de brouillons à valider');
+
+Schedule::command('markets:discover-africa')->cron('15 */6 * * *')->withoutOverlapping(30);
 
 Artisan::command('payments:accept-late-deposit {reference} {--actor=} {--case=}', function (Payments $payments) {
     try {

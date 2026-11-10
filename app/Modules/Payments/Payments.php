@@ -46,21 +46,21 @@ class Payments
         abort_if(app()->isProduction() && (config('app.debug') || in_array(config('queue.default'), ['sync', 'null', 'deferred', 'background'])), 503, 'Configuration de production incomplète.');
         abort_unless(Str::isUuid($data['reference'] ?? ''), 422);
         $passwordHash = null;
-        $beneficiary = null;
+        $payoutOptions = null;
         if ($payout) {
-            $beneficiary = app(PayoutBeneficiaries::class)->find($userId, Wallets::currency($userId));
-            abort_unless($beneficiary, 403);
-            if (($data['currency'] ?? null) !== $beneficiary['currency']) {
+            $currency = Wallets::currency($userId);
+            if (($data['currency'] ?? null) !== $currency) {
                 throw ValidationException::withMessages(['currency' => 'La devise du retrait doit correspondre au portefeuille sélectionné.']);
             }
-            if (($data['correspondent'] ?? null) !== $beneficiary['correspondent']) {
-                throw ValidationException::withMessages(['correspondent' => 'Cet opérateur ne correspond pas au bénéficiaire autorisé pour ce portefeuille.']);
+            $payoutOptions = app(PayoutOptions::class)->forWallet($userId, $currency);
+            abort_unless($payoutOptions, 403);
+            $code = $data['correspondent'] ?? null;
+            $operator = is_string($code) ? ($payoutOptions['operators'][$code] ?? null) : null;
+            if ($operator === null) {
+                throw ValidationException::withMessages(['correspondent' => 'Cet opérateur n’est pas autorisé pour la devise du portefeuille.']);
             }
-            if (array_key_exists('msisdn', $data) || array_key_exists('country', $data)) {
-                throw ValidationException::withMessages(['beneficiary' => 'La destination du retrait est définie par le bénéficiaire vérifié.']);
-            }
-            if (! is_string($data['beneficiary'] ?? null) || ! hash_equals($beneficiary['token'], $data['beneficiary'])) {
-                throw ValidationException::withMessages(['beneficiary' => 'Le bénéficiaire a changé. Rechargez la page.']);
+            if (! is_string($data['wallet_token'] ?? null) || ! hash_equals($payoutOptions['token'], $data['wallet_token'])) {
+                throw ValidationException::withMessages(['wallet_token' => 'Le portefeuille a changé. Rechargez la page.']);
             }
             $passwordHash = $user->getAuthPassword();
             if (! is_string($data['current_password'] ?? null) || ! Hash::check($data['current_password'], $passwordHash)) {
@@ -68,15 +68,16 @@ class Payments
             }
             $data = [
                 'kind' => $kind, 'reference' => $data['reference'],
-                'amount' => Money::minor($data['amount'] ?? null, $beneficiary['currency']),
-                ...array_intersect_key($beneficiary, array_flip(['country', 'currency', 'correspondent', 'msisdn'])),
+                'amount' => Money::minor($data['amount'] ?? null, $currency),
+                'currency' => $currency, 'country' => $operator['country'], 'correspondent' => $code,
+                'msisdn' => app(Capabilities::class)->normalizePhone($data['msisdn'] ?? null, $operator),
             ];
         } else {
             $data = app(Capabilities::class)->validate($data);
         }
         $fingerprint = hash_hmac('sha256', json_encode([$userId, $data['kind'], $data['amount'], $data['currency'], $data['country'], $data['correspondent'], $data['msisdn']]), config('app.key'));
         try {
-            $payment = DB::transaction(function () use ($userId, $data, $fingerprint, $payout, $settings, $beneficiary, $passwordHash) {
+            $payment = DB::transaction(function () use ($userId, $data, $fingerprint, $payout, $settings, $payoutOptions, $passwordHash) {
                 $user = User::query()->lockForUpdate()->findOrFail($userId);
                 abort_unless(app(PaymentPolicy::class)->deposit($user), 403);
                 DB::table('infrastructure_settings')->where('id', 1)->lockForUpdate()->firstOrFail();
@@ -84,7 +85,7 @@ class Payments
                 if ($payout) {
                     abort_if($settings->current()['app_maintenance'], 503, 'Les retraits sont temporairement indisponibles.');
                     abort_unless($user->getAuthPassword() === $passwordHash
-                        && app(PayoutBeneficiaries::class)->find($userId, $currency) === $beneficiary, 403);
+                        && app(PayoutOptions::class)->forWallet($userId, $currency) === $payoutOptions, 403);
                 } else {
                     abort_unless($settings->acceptingDeposits(), 503, 'Les dépôts sont temporairement indisponibles.');
                     $limits = $settings->current();
@@ -114,8 +115,8 @@ class Payments
                     $recent = DB::table('payments')->where('user_id', $userId)->where('kind', 'withdraw')
                         ->where('currency', $currency)->where('local_state', 'completed')
                         ->where('confirmed_at', '>=', now()->subDay())->sum('amount');
-                    if ($data['amount'] < $beneficiary['min_amount'] || $data['amount'] > $beneficiary['max_amount']
-                        || $recent > $beneficiary['daily_limit'] - $data['amount']) {
+                    if ($data['amount'] < $payoutOptions['min_amount'] || $data['amount'] > $payoutOptions['max_amount']
+                        || $recent > $payoutOptions['daily_limit'] - $data['amount']) {
                         throw ValidationException::withMessages(['amount' => 'Plafond de retrait par opération ou sur 24 heures dépassé.']);
                     }
                 }
@@ -123,7 +124,7 @@ class Payments
                     DB::table('payment_wallets')->insert(['user_id' => $userId, 'currency' => 'XAF', 'balance' => 0]);
                 }
                 $wallet = DB::table('payment_wallets')->where('user_id', $userId)->where('currency', $currency)->lockForUpdate()->firstOrFail();
-                if ($wallet->currency !== $data['currency'] || ($payout && (int) $wallet->id !== $beneficiary['wallet_id'])) {
+                if ($wallet->currency !== $data['currency'] || ($payout && (int) $wallet->id !== $payoutOptions['wallet_id'])) {
                     throw ValidationException::withMessages(['correspondent' => 'Cet opérateur ne correspond pas à la devise du portefeuille sélectionné.']);
                 }
                 $record = $data;

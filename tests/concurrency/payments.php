@@ -6,7 +6,7 @@ use App\Models\User;
 use App\Modules\Ledger\Ledger;
 use App\Modules\Payments\Inbox;
 use App\Modules\Payments\Payments;
-use App\Modules\Payments\PayoutBeneficiaries;
+use App\Modules\Payments\PayoutOptions;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -89,11 +89,10 @@ if (($argv[1] ?? '') === '--worker') {
         check(trim(fgets(STDIN)) === 'GO', 'Missing barrier.');
         if ($job['operation'] === 'create') {
             if ($job['data']['kind'] === 'withdraw') {
-                config(['payments.payouts_enabled' => true, 'payments.payout_beneficiaries' => [$job['user'] => [
-                    'currency' => 'XAF', 'country' => 'GAB', 'correspondent' => 'AIRTEL_GAB', 'msisdn' => '24177000000',
+                config(['payments.payouts_enabled' => true, 'payments.payout_limits' => ['XAF' => [
                     'min_amount' => '100', 'max_amount' => '1000', 'daily_limit' => '2000',
                 ]]]);
-                $job['data']['beneficiary'] = app(PayoutBeneficiaries::class)->find($job['user'], 'XAF')['token'];
+                $job['data']['wallet_token'] = app(PayoutOptions::class)->forWallet($job['user'], 'XAF')['token'];
             }
             app(Payments::class)->create($job['user'], $job['data']);
         } elseif ($job['operation'] === 'inbox') {
@@ -219,7 +218,7 @@ try {
     DB::transaction(fn () => app(Ledger::class)->transfer($withdrawer->id, (string) Str::uuid(), 'Dépôt NDSGPay', 1000, true));
     $withdraw = ['operation' => 'create', 'user' => $withdrawer->id, 'data' => [
         'kind' => 'withdraw', 'amount' => 1000, 'reference' => (string) Str::uuid(), 'current_password' => 'isolated-payout-password',
-        'currency' => 'XAF', 'correspondent' => 'AIRTEL_GAB',
+        'currency' => 'XAF', 'correspondent' => 'AIRTEL_GAB', 'msisdn' => '24177000000',
     ]];
     $otherWithdrawal = $withdraw;
     $otherWithdrawal['data']['reference'] = (string) Str::uuid();

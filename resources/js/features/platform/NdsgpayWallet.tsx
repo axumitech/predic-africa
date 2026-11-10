@@ -15,7 +15,7 @@ export type NdsgpayWalletData = {
     maintenance_message?: string;
     correspondent_labels?: Record<string, string>;
     payout_unavailable_message?: string | null;
-    payout?: { token: string; correspondent: string; operator: string; country: string; last_digits: string; min_amount: string; max_amount: string; pending: boolean } | null;
+    payout?: { token: string; correspondents: string[]; min_amount: string; max_amount: string; pending: boolean } | null;
     payments: { id: number; reference: string; kind: string; amount: Minor; currency: string; status: string; local_state: string; created_at: string }[];
 };
 
@@ -38,7 +38,7 @@ export default function NdsgpayWallet({ data, mode }: { data?: NdsgpayWalletData
     const withdrawing = mode === 'withdraw';
     const available = withdrawing ? !!payout : data?.enabled;
     return <Panel title={withdrawing ? `Retirer depuis mon portefeuille ${data?.currency ?? ''}` : 'Alimenter mon portefeuille'} className="p-payment-panel">
-        <div className="p-payment-heading"><span className="p-payment-icon" aria-hidden="true">↗</span><div><strong>Mobile Money</strong><small>{withdrawing ? 'Envoi au bénéficiaire vérifié' : 'Confirmation sur votre téléphone'}</small></div><Badge tone={available ? 'success' : 'neutral'}>{available ? 'NDSGPay' : 'Indisponible'}</Badge></div>
+        <div className="p-payment-heading"><span className="p-payment-icon" aria-hidden="true">↗</span><div><strong>Mobile Money</strong><small>{withdrawing ? 'Envoi au numéro du bénéficiaire' : 'Confirmation sur votre téléphone'}</small></div><Badge tone={available ? 'success' : 'neutral'}>{available ? 'NDSGPay' : 'Indisponible'}</Badge></div>
         {!withdrawing && (!data?.enabled ? <div className="p-service-note"><h3>Les dépôts sont temporairement indisponibles.</h3><p>Votre solde et vos opérations restent accessibles. Réessayez plus tard ou contactez le support.</p><Link href="/support">Contacter le support →</Link></div>
             : blocked ? <div className="ds-alert ds-alert--warning"><strong>Un dépôt est déjà en cours.</strong><p>Attendez sa confirmation ou contactez le support avec sa référence. Ne relancez pas le paiement.</p></div>
             : data.correspondents.length > 0 ? <ActionForm action="/wallet/ndsgpay" initial={{ kind: 'deposit', amount: '1000', reference: crypto.randomUUID(), correspondent: data.correspondents[0], msisdn: '' }} freshReference fields={[
@@ -51,11 +51,13 @@ export default function NdsgpayWallet({ data, mode }: { data?: NdsgpayWalletData
             <Link href="/support">Contacter le support →</Link>
         </div>
             : payout.pending ? <div className="ds-alert ds-alert--warning"><strong>Un retrait est déjà en cours.</strong><p>Attendez sa confirmation ou contactez le support avec sa référence.</p></div>
-                : <ActionForm key={payout.token} action="/wallet/ndsgpay" initial={{ kind: 'withdraw', currency: data.currency, correspondent: payout.correspondent, amount: '', reference: crypto.randomUUID(), beneficiary: payout.token, current_password: '' }} freshReference fields={[
+                : <ActionForm key={payout.token} action="/wallet/ndsgpay" initial={{ kind: 'withdraw', currency: data.currency, correspondent: payout.correspondents[0], msisdn: '', amount: '', reference: crypto.randomUUID(), wallet_token: payout.token, current_password: '' }} freshReference fields={[
+                    { name: 'correspondent', label: 'Pays et opérateur du bénéficiaire', options: payout.correspondents.map(value => ({ value, label: data.correspondent_labels?.[value] ?? value })) },
+                    { name: 'msisdn', label: 'Numéro Mobile Money du bénéficiaire', type: 'tel', hint: 'Saisissez le numéro local ou international correspondant à l’opérateur choisi.' },
                     { name: 'amount', label: `Montant en ${data.currency}`, type: 'number', min: Number(payout.min_amount), max: Number(payout.max_amount), step: data.scale ? '0.01' : '1', hint: `De ${payout.min_amount} à ${payout.max_amount} ${data.currency}.` },
                     { name: 'current_password', label: 'Mot de passe PredicAfrica', type: 'password' },
                 ]} submit="Continuer le retrait">
-                    <p>Bénéficiaire vérifié · {payout.country} · {payout.operator} · •••• {payout.last_digits}. Le montant sera réservé dans le portefeuille {data.currency}.</p>
+                    <p>Le montant sera réservé dans le portefeuille {data.currency}.</p>
                 </ActionForm>)}
         <p className="p-payment-security">Ne saisissez jamais votre code Mobile Money sur ce site.</p>
         {!!data?.payments.length && <section className="p-payment-history" aria-label="Suivi des paiements"><h3>Suivi des paiements</h3>{data.payments.map(payment => <article className="p-payment-item" key={payment.id}>

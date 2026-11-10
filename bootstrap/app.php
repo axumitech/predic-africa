@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [ActiveAccount::class, \App\Modules\Infrastructure\Maintenance::class, HandleInertiaRequests::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontFlash(['msisdn']);
         $exceptions->respond(function ($response, $exception, $request) {
             $status = $response->getStatusCode();
             $response->headers->set('Cache-Control', 'private, no-store');

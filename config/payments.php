@@ -1,7 +1,7 @@
 <?php
 
 $capabilities = json_decode(env('NDSGPAY_CAPABILITIES', '[]'), true);
-$payoutBeneficiaries = json_decode(env('NDSGPAY_PAYOUT_BENEFICIARIES', '{}'), true);
+$payoutLimits = json_decode(env('NDSGPAY_PAYOUT_LIMITS', '{}'), true);
 
 return [
     'enabled' => env('NDSGPAY_ENABLED', false),
@@ -21,5 +21,5 @@ return [
     'min_amount' => 100,
     'max_amount' => 1000000,
     'payouts_enabled' => env('NDSGPAY_PAYOUTS_ENABLED', false),
-    'payout_beneficiaries' => is_array($payoutBeneficiaries) ? $payoutBeneficiaries : [],
+    'payout_limits' => is_array($payoutLimits) ? $payoutLimits : [],
 ];
