@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -176,6 +177,36 @@ class MarketsPredictionsTest extends TestCase
         $this->post('/admin/pipeline/import', ['id' => 7])->assertRedirect('/markets/1')->assertSessionHasNoErrors();
         $this->assertDatabaseHas('markets', ['id' => 1, 'status' => 'rejected']);
         Http::assertSentCount(1);
+    }
+
+    public function test_publishing_an_imported_suggestion_adds_it_to_the_market_list(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $trader = User::factory()->create();
+        Http::fake(['*' => Http::response(['simulation' => false, 'data' => [$this->suggestion()]])]);
+        $this->actingAs($admin)->post('/admin/pipeline/import', ['id' => 7])->assertSessionHasNoErrors();
+        $market = DB::table('markets')->sole();
+        $adminUrl = "/admin/markets/$market->id";
+
+        $this->actingAs($trader)->get('/markets')->assertInertia(
+            fn (Assert $page) => $page->has('markets.data', 0),
+        );
+        $this->actingAs($admin)->from($adminUrl)->post("$adminUrl/moderate", [
+            'status' => 'open',
+            'revision' => MarketDraft::revision($market),
+            'title' => $market->title,
+            'description' => $market->description,
+            'category' => $market->category,
+            'closes_at' => $market->closes_at,
+            'yes_odds' => $market->yes_odds,
+            'no_odds' => $market->no_odds,
+        ])->assertRedirect($adminUrl)->assertSessionHas('success', 'Modération enregistrée. Marché publié.');
+
+        $this->actingAs($trader)->get('/markets')->assertInertia(
+            fn (Assert $page) => $page->has('markets.data', 1)
+                ->where('markets.data.0.id', $market->id)
+                ->where('markets.data.0.status', 'open'),
+        );
     }
 
     public function test_import_rejects_unsupported_precision_and_unknown_categories(): void

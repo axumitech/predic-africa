@@ -5,7 +5,7 @@ export default function MarketReviewForm({ market, revision }: { market: Market;
     const officialDraft = market.pipeline_source?.startsWith('africa:');
     return <>
         <ActionForm action={action} initial={{
-            revision, status: 'pending', title: market.title, description: market.description,
+            revision, status: 'open', title: market.title, description: market.description,
             category: market.category, closes_at: market.closes_at.replace(' ', 'T').slice(0, 16),
             yes_odds: String(market.yes_odds), no_odds: String(market.no_odds),
         }} fields={[
@@ -17,10 +17,10 @@ export default function MarketReviewForm({ market, revision }: { market: Market;
             { name: 'yes_odds', label: 'Cote Oui en centièmes', type: 'number', min: 101, max: 1000 },
             { name: 'no_odds', label: 'Cote Non en centièmes', type: 'number', min: 101, max: 1000 },
             { name: 'status', label: 'Décision', options: [
-                { value: 'pending', label: 'Enregistrer le brouillon' },
                 { value: 'open', label: 'Publier ce marché' },
+                { value: 'pending', label: 'Garder en brouillon' },
             ] },
-        ]} submit="Confirmer la décision">
+        ]} submit="Vérifier la décision">
             {officialDraft && <p>Vérifiez le calendrier officiel et fixez les cotes avant publication. Les cotes initiales du brouillon sont indicatives.</p>}
         </ActionForm>
         <ActionForm action={action} initial={{ status: 'rejected', revision }} fields={[]} submit="Rejeter le brouillon"/>
