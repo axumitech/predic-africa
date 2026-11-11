@@ -94,6 +94,11 @@ export function ActionForm({ action, initial, fields, submit, children, freshRef
     const sensitive = action === '/wallet/ndsgpay' || action === '/markets' || /\/(positions|moderate|resolve)$/.test(action);
     const send = () => {
         if (form.processing) return;
+        if (action === '/wallet/ndsgpay' && element.current && !element.current.checkValidity()) {
+            setConfirm(false);
+            requestAnimationFrame(() => element.current?.reportValidity());
+            return;
+        }
         form.post(action, { preserveScroll: true,
             onError: errors => { setConfirm(false); requestAnimationFrame(() => { const first = fields.find(f => errors[f.name]); if (first) element.current?.querySelector<HTMLElement>(`[name="${first.name}"]`)?.focus(); }); },
             onSuccess: () => { setConfirm(false); if (freshReference) form.setData('reference', crypto.randomUUID()); for (const field of fields) if (field.type === 'password') form.setData(field.name, ''); onDone?.(); }

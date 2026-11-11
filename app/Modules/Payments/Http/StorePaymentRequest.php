@@ -34,4 +34,16 @@ class StorePaymentRequest extends FormRequest
         // Payments validates and normalizes once, in the wallet's native units.
         return $this->validated();
     }
+
+    public function messages(): array
+    {
+        return [
+            'correspondent.required' => 'Sélectionnez un opérateur Mobile Money.',
+            'msisdn.required' => $this->input('kind') === 'withdraw'
+                ? 'Saisissez le numéro Mobile Money du bénéficiaire.'
+                : 'Saisissez votre numéro Mobile Money.',
+            'wallet_token.required' => 'Rechargez la page du portefeuille, puis recommencez le retrait.',
+            'wallet_token.size' => 'Rechargez la page du portefeuille, puis recommencez le retrait.',
+        ];
+    }
 }

@@ -90,9 +90,13 @@ try {
     await page.getByRole('heading', { name: 'Retirer depuis mon portefeuille CDF', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).waitFor();
     await page.getByLabel('Pays et opérateur du bénéficiaire').selectOption('AIRTEL_COD');
-    await page.getByLabel('Numéro Mobile Money du bénéficiaire').fill('0810000123');
     await page.getByRole('spinbutton', { name: 'Montant en CDF', exact: true }).fill('120.25');
     await page.getByLabel('Mot de passe PredicAfrica', { exact: true }).fill('transfer-password-123');
+    const beneficiary = page.getByLabel('Numéro Mobile Money du bénéficiaire');
+    await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).click();
+    assert.equal(await beneficiary.evaluate(input => input.validity.valueMissing && document.activeElement === input), true);
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    await beneficiary.fill('0810000123');
     await page.getByRole('button', { name: 'Continuer le retrait', exact: true }).click();
     const payoutDialog = page.getByRole('dialog');
     await payoutDialog.getByText('0810000123', { exact: true }).waitFor();
