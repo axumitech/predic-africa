@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Modules\Ledger\Ledger;
+use App\Modules\Settlement\CafMatchReport;
 use App\Modules\Settlement\OfficialResult;
 use App\Modules\Settlement\ProcessMarket;
 use App\Modules\Settlement\ResolveMarket;
 use App\Modules\Trading\PlacePosition;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -46,6 +48,51 @@ class MarketLifecycleTest extends TestCase
         return ['event' => 'finale-1', 'condition' => 'vainqueur-temps-reglementaire',
             'status' => $status, 'value' => $value, 'official_url' => 'https://official.test/finale-1',
             'verified_at' => now()->utc()->format('Y-m-d\TH:i:s\Z')];
+    }
+
+    public function test_caf_pilot_settles_once_from_the_official_match_report(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-12T15:00:00Z'));
+        $user = User::factory()->create();
+        $market = $this->market($user);
+        $this->place($user, $market);
+        DB::table('markets')->where('id', $market)->update([
+            'event_ends_at' => '2026-11-12 18:30:00',
+            'resolution_rule' => json_encode([
+                'providers' => ['caf_match_report'], 'event' => CafMatchReport::EVENT,
+                'condition' => CafMatchReport::CONDITION, 'yes_value' => 'home_win', 'no_value' => 'no_home_win',
+                'on_cancel' => 'void', 'on_tie' => 'no',
+            ], JSON_THROW_ON_ERROR),
+        ]);
+        $this->travelTo(CarbonImmutable::parse('2026-11-13T12:00:00Z'));
+        if (getenv('PREDIC_CAF_STAGING_LIVE') !== '1') {
+            Http::preventStrayRequests();
+            Http::fake([CafMatchReport::URL => Http::response(
+                '<time>Thursday, 12 November 2026</time><h2>DR Congo 3-1 Sierra Leone: Match report</h2>'
+            )]);
+        }
+
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->artisan('markets:process')->assertSuccessful();
+        }
+        $this->assertDatabaseHas('markets', ['id' => $market, 'status' => 'settled', 'result' => 'yes']);
+        $evidence = json_decode(DB::table('market_transitions')->where('market_id', $market)
+            ->where('to_status', 'resolved')->value('evidence'), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('3-1', $evidence[0]['score']);
+        $this->assertSame(CafMatchReport::URL, $evidence[0]['url']);
+        $this->assertDatabaseCount('position_settlements', 1);
+        $this->assertDatabaseHas('position_settlements', ['amount' => 200, 'status' => 'won']);
+        $this->artisan('ledger:reconcile')->assertSuccessful();
+    }
+
+    public function test_caf_report_with_ambiguous_scores_is_rejected(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([CafMatchReport::URL => Http::response(
+            '<time>Thursday, 12 November 2026</time><h2>DR Congo 3-1 Sierra Leone: Report</h2><h2>DR Congo 1-3 Sierra Leone: Report</h2>'
+        )]);
+        $this->expectExceptionMessage('Date ou score CAF absent ou ambigu.');
+        app(CafMatchReport::class)->attest(CafMatchReport::EVENT, CafMatchReport::CONDITION);
     }
 
     public function test_scheduler_closes_betting_before_event_ends_without_inventing_a_result(): void

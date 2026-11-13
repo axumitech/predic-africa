@@ -14,16 +14,9 @@ class OfficialResult
         $observations = [];
         $outcomes = [];
         foreach ($rule['providers'] as $provider) {
-            $endpoint = config("market_resolution.providers.$provider");
-            if (! is_string($endpoint) || parse_url($endpoint, PHP_URL_SCHEME) !== 'https' || ! parse_url($endpoint, PHP_URL_HOST)) {
-                throw new RuntimeException('Adaptateur de résultat indisponible.');
-            }
-            $response = Http::acceptJson()->connectTimeout(2)->timeout(4)->withoutRedirecting()
-                ->get($endpoint, ['event' => $rule['event'], 'condition' => $rule['condition']])->throw();
-            if (! $response->successful()) {
-                throw new RuntimeException('Réponse inattendue de l’adaptateur.');
-            }
-            $data = $response->json();
+            $data = $provider === 'caf_match_report'
+                ? app(CafMatchReport::class)->attest($rule['event'], $rule['condition'])
+                : $this->fetchEndpoint($provider, $rule);
             if (! is_array($data) || ($data['event'] ?? null) !== $rule['event']
                 || ($data['condition'] ?? null) !== $rule['condition']) {
                 throw new RuntimeException('Attestation hors contrat.');
@@ -53,7 +46,8 @@ class OfficialResult
             $outcomes[] = $outcome;
             $observations[] = ['provider' => $provider, 'event' => $rule['event'], 'condition' => $rule['condition'],
                 'status' => $status, 'value' => is_string($value) && strlen($value) <= 100 ? $value : null,
-                'url' => $data['official_url'], 'verified_at' => $data['verified_at']];
+                'url' => $data['official_url'], 'verified_at' => $data['verified_at'],
+                ...($provider === 'caf_match_report' ? ['score' => $data['score'], 'document_sha256' => $data['document_sha256']] : [])];
         }
 
         if (count(array_unique($outcomes)) > 1) {
@@ -61,5 +55,20 @@ class OfficialResult
         }
 
         return [count($outcomes) === count($rule['providers']) ? $outcomes[0] : 'undetermined', $observations];
+    }
+
+    private function fetchEndpoint(string $provider, array $rule): mixed
+    {
+        $endpoint = config("market_resolution.providers.$provider");
+        if (! is_string($endpoint) || parse_url($endpoint, PHP_URL_SCHEME) !== 'https' || ! parse_url($endpoint, PHP_URL_HOST)) {
+            throw new RuntimeException('Adaptateur de résultat indisponible.');
+        }
+        $response = Http::acceptJson()->connectTimeout(2)->timeout(4)->withoutRedirecting()
+            ->get($endpoint, ['event' => $rule['event'], 'condition' => $rule['condition']])->throw();
+        if (! $response->successful()) {
+            throw new RuntimeException('Réponse inattendue de l’adaptateur.');
+        }
+
+        return $response->json();
     }
 }

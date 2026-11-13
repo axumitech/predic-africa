@@ -40,3 +40,13 @@ L’endpoint reçoit les paramètres `event` et `condition`. La réponse JSON do
 Pour une correction officielle après règlement, consigner la preuve et la justification via l’action de correction historique. La procédure opérationnelle consiste à vérifier la source, rapprocher les positions et soldes, chiffrer les écarts par devise et obtenir l’autorisation financière avant toute écriture compensatoire. La décision initiale et les écritures historiques restent consultables. L’outil enregistre le signalement. Il n’exécute aucune compensation.
 
 En cas de retour arrière, arrêter le scheduler et le worker marchés. Conserver le nouveau schéma et les écritures. Une ancienne version applicative peut ignorer les nouveaux statuts et ne doit être remise en service qu’après préparation d’un parcours compatible.
+
+## Marché pilote CAF
+
+L’adaptateur intégré `caf_match_report` lit le rapport de la CAF pour RD Congo – Sierra Leone du 12 novembre 2026, troisième journée des qualifications à la CAN 2027. La migration rattache le rapport au contrat historique uniquement si son identifiant de calendrier, son échéance, son titre et ses règles correspondent et si le marché est fermé sans décision. L’heure de 18 h 30 UTC constitue une borne de traitement. Le rapport officiel fait foi pour le résultat. L’attestation conserve le score et l’empreinte du document récupéré.
+
+Pour rejouer le parcours en environnement de test isolé avec le rapport officiel en direct et un portefeuille fictif.
+
+```sh
+PREDIC_CAF_STAGING_LIVE=1 php artisan test --filter=test_caf_pilot_settles_once_from_the_official_match_report
+```
