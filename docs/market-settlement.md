@@ -50,3 +50,16 @@ Pour rejouer le parcours en environnement de test isolé avec le rapport officie
 ```sh
 PREDIC_CAF_STAGING_LIVE=1 php artisan test --filter=test_caf_pilot_settles_once_from_the_official_match_report
 ```
+
+## Raccordement des matchs retour CAF
+
+Le calendrier officiel fixe les rencontres du 17 novembre 2026. Le raccordement reste individuel. L’adaptateur vérifie la date du rapport, les deux équipes et l’unicité du score, puis remet le score dans l’ordre du contrat, même si le rapport présente le vainqueur en premier.
+
+| Marché | Identifiant | Variable d’URL du rapport |
+| --- | --- | --- |
+| Sierra Leone – RD Congo | afcon-2027-md4-sle-cod-2026-11-17 | CAF_REPORT_SLE_COD_MD4 |
+| Gambie – Côte d’Ivoire | afcon-2027-md4-gmb-civ-2026-11-17 | CAF_REPORT_GMB_CIV_MD4 |
+| Niger – Maroc | afcon-2027-md4-ner-mar-2026-11-17 | CAF_REPORT_NER_MAR_MD4 |
+| Lesotho – Gabon | afcon-2027-md4-les-gab-2026-11-17 | CAF_REPORT_LES_GAB_MD4 |
+
+Après publication du rapport final, confirmer qu’il couvre le match et le temps réglementaire. Configurer son URL CAF dans une préproduction avec une copie du contrat et exécuter `php artisan markets:caf-check <event>`. Comparer le score, la décision et l’URL avec le rapport. Ensuite, renseigner la même URL en production, reconstruire le cache de configuration et relancer la commande avec `--activate`. La commande relit la source et ne rattache que le marché fermé, sans résultat ni règle existante, dont le contrat correspond. Vérifier le résultat et les écritures après le passage du worker. En cas de report ou d’annulation, appliquer le parcours administratif prévu au contrat.

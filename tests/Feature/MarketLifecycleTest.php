@@ -85,6 +85,58 @@ class MarketLifecycleTest extends TestCase
         $this->artisan('ledger:reconcile')->assertSuccessful();
     }
 
+    public static function cafReturnFixtures(): array
+    {
+        return [
+            'Sierra Leone – RD Congo' => ['sle-cod', 'Sierra Leone', 'DR Congo', 'yes', '2-1'],
+            'Gambie – Côte d’Ivoire' => ['gmb-civ', 'Gambia', 'Côte d’Ivoire', 'no', '1-2'],
+            'Niger – Maroc' => ['ner-mar', 'Niger', 'Morocco', 'no', '0-0'],
+            'Lesotho – Gabon' => ['les-gab', 'Lesotho', 'Gabon', 'yes', '1-0'],
+        ];
+    }
+
+    #[DataProvider('cafReturnFixtures')]
+    public function test_caf_return_contract_requires_dated_evidence_before_activation(
+        string $fixtureKey, string $first, string $second, string $outcome, string $score
+    ): void {
+        $event = "afcon-2027-md4-$fixtureKey-2026-11-17";
+        $fixture = config('caf_qualifiers')[$event];
+        $user = User::factory()->create();
+        $this->travelTo(CarbonImmutable::parse('2026-11-17T10:00:00Z'));
+        $market = $this->market($user);
+        $this->place($user, $market);
+        [$a, $b] = $fixture['market_teams'];
+        DB::table('markets')->where('id', $market)->update([
+            'status' => 'closed', 'pipeline_source' => $fixture['source'],
+            'title' => "$a – $b · Victoire de la première équipe dans le temps réglementaire ?",
+            'description' => "Oui si $a gagne à l’issue du temps réglementaire, arrêts de jeu compris. Non en cas de nul ou de victoire de $b. Si le match est reporté ou annulé, annuler le marché.\n\nAnnonce officielle\nhttps://www.cafonline.com/",
+        ]);
+
+        $report = 'https://www.cafonline.com/afcon2025/news/staging-return-fixture/';
+        config(["caf_qualifiers.$event.report" => $report]);
+        Http::preventStrayRequests();
+        [$home, $away] = explode('-', $score);
+        $markup = "<meta charset=utf-8><h2>$second $away-$home $first: rapport</h2>";
+        Http::fake([$report => Http::sequence()
+            ->push('<time>Thursday, 12 November 2026</time>'.$markup)
+            ->push('<time>Tuesday, 17 November 2026</time>'.$markup)
+            ->push('<time>Tuesday, 17 November 2026</time>'.$markup)]);
+        $this->artisan('markets:caf-check', ['event' => $event, '--activate' => true])->assertFailed();
+        Http::assertNothingSent();
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-18T00:00:00Z'));
+        $this->assertThrows(fn () => $this->artisan('markets:caf-check', ['event' => $event, '--activate' => true])->run(),
+            \RuntimeException::class, 'Date ou score CAF absent ou ambigu.');
+        $this->assertDatabaseHas('markets', ['id' => $market, 'status' => 'closed', 'resolution_rule' => null]);
+        $this->artisan('markets:caf-check', ['event' => $event, '--activate' => true])->assertSuccessful();
+        $this->artisan('markets:process')->assertSuccessful();
+        $this->artisan('markets:process')->assertSuccessful();
+        $this->assertDatabaseHas('markets', ['id' => $market, 'status' => 'settled', 'result' => $outcome]);
+        $this->assertDatabaseHas('position_settlements', ['status' => $outcome === 'yes' ? 'won' : 'lost']);
+        $this->assertDatabaseCount('position_settlements', 1);
+        $this->artisan('ledger:reconcile')->assertSuccessful();
+    }
+
     public function test_caf_report_with_ambiguous_scores_is_rejected(): void
     {
         Http::preventStrayRequests();

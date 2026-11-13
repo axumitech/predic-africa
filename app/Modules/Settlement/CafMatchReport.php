@@ -2,6 +2,7 @@
 
 namespace App\Modules\Settlement;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -15,11 +16,22 @@ class CafMatchReport
 
     public function attest(string $event, string $condition): array
     {
-        if ($event !== self::EVENT || $condition !== self::CONDITION) {
+        $fixture = $event === self::EVENT ? [
+            'report' => self::URL, 'report_teams' => ['DR Congo', 'Sierra Leone'], 'kickoff' => '2026-11-12T16:00:00Z',
+        ] : (config('caf_qualifiers')[$event] ?? null);
+        if ($fixture === null || $condition !== self::CONDITION) {
             throw new RuntimeException('Rencontre ou condition CAF non prise en charge.');
         }
 
-        $response = Http::connectTimeout(3)->timeout(8)->withoutRedirecting()->get(self::URL);
+        $url = $fixture['report'];
+        if ($url === null) {
+            return compact('event', 'condition') + ['status' => 'pending'];
+        }
+        if (! is_string($url) || ! preg_match('~^https://www\.cafonline\.com/afcon2025/news/[a-z0-9-]+/$~D', $url)) {
+            throw new RuntimeException('URL du rapport CAF invalide.');
+        }
+
+        $response = Http::connectTimeout(3)->timeout(8)->withoutRedirecting()->get($url);
         if ($response->notFound()) {
             return compact('event', 'condition') + ['status' => 'pending'];
         }
@@ -35,14 +47,18 @@ class CafMatchReport
         foreach ($document->getElementsByTagName('time') as $time) {
             $dates[] = trim($time->textContent);
         }
+        [$first, $second] = array_map(fn ($team) => preg_quote($team, '~'), $fixture['report_teams']);
+        $date = CarbonImmutable::parse($fixture['kickoff'])->format('l, j F Y');
         $scores = [];
         foreach ($document->getElementsByTagName('h2') as $heading) {
-            if (preg_match('/^DR Congo (\d{1,2})\s*[-–]\s*(\d{1,2}) Sierra Leone:/u', trim($heading->textContent), $match)) {
-                $scores[] = [(int) $match[1], (int) $match[2]];
+            if (preg_match("~^($first|$second) (\d{1,2})\s*[-–]\s*(\d{1,2}) ($first|$second)(?::|$)~iu", str_replace("'", '’', trim($heading->textContent)), $match)
+                && strcasecmp($match[1], $match[4]) !== 0) {
+                $score = [(int) $match[2], (int) $match[3]];
+                $scores[] = strcasecmp($match[1], $fixture['report_teams'][0]) === 0 ? $score : array_reverse($score);
             }
         }
         // This group-stage fixture has no extra time or penalty shootout.
-        if (! in_array('Thursday, 12 November 2026', $dates, true) || count($scores) !== 1) {
+        if (! in_array($date, $dates, true) || count($scores) !== 1) {
             throw new RuntimeException('Date ou score CAF absent ou ambigu.');
         }
         [$home, $away] = $scores[0];
@@ -50,7 +66,7 @@ class CafMatchReport
         return compact('event', 'condition') + [
             'status' => 'final',
             'value' => $home > $away ? 'home_win' : 'no_home_win',
-            'official_url' => self::URL,
+            'official_url' => $url,
             'verified_at' => now()->utc()->format('Y-m-d\TH:i:s\Z'),
             'score' => "$home-$away",
             'document_sha256' => hash('sha256', $response->body()),
