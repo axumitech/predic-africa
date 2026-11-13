@@ -67,7 +67,10 @@ class MarketWorkflow
                     throw ValidationException::withMessages(['operation' => 'Marché invalide ou échéance dépassée. Publication refusée.']);
                 }
             }
-            DB::table('markets')->where('id', $id)->update([...$changes, 'status' => $status, 'updated_at' => now()]);
+            if ($market->event_ends_at !== null && CarbonImmutable::parse($changes['closes_at'] ?? $market->closes_at)->gt($market->event_ends_at)) {
+                throw ValidationException::withMessages(['closes_at' => 'La clôture doit précéder ou coïncider avec la fin de la période d’observation.']);
+            }
+            MarketState::transition($market, $status, 'Modération du marché.', $changes, $actorId);
             if ($status !== 'pending') {
                 Notifier::send($market->creator_id, $status === 'open' ? 'Votre marché a été publié.' : 'Votre marché a été rejeté.');
             }

@@ -13,6 +13,7 @@ final class MarketDraft
         return hash('sha256', json_encode([
             $market->id, $market->status, $market->title, $market->description, $market->category,
             $market->closes_at, $market->source_closes_at ?? null, $market->yes_odds, $market->no_odds, $market->updated_at,
+            $market->event_ends_at ?? null, $market->resolution_rule ?? null,
         ], JSON_THROW_ON_ERROR));
     }
 

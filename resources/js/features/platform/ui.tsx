@@ -21,6 +21,9 @@ export type Market = {
     no_odds: number;
     result: string | null;
     resolution_source: string | null;
+    resolution_rule?: string | object | null;
+    resolved_at?: string | null;
+    processing_error?: string | null;
     pipeline_source?: string | null;
     source_closes_at?: string | null;
     volume?: number;
@@ -41,7 +44,7 @@ export type Account = {
 export const categories = ['Sport', 'Politique', 'Musique', 'Économie', 'Crypto', 'Société'];
 export const money = (value: number) => new Intl.NumberFormat('fr-FR').format(value);
 export const date = (value: string) => new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z'));
-export const labels: Record<string, string> = { pending: 'À modérer', open: 'Ouvert', rejected: 'Rejeté', resolved: 'Résolu', void: 'Annulé', won: 'Gagnée', lost: 'Perdue', refunded: 'Remboursée', closed: 'Fermé', yes: 'Oui', no: 'Non' };
+export const labels: Record<string, string> = { pending: 'À modérer', open: 'Ouvert', rejected: 'Rejeté', pending_resolution: 'Résultat en attente', disputed: 'Contesté', resolved: 'Résultat validé', settling: 'Règlement en cours', settled: 'Terminé', cancelled: 'Annulé', awaiting: 'En attente', void: 'Annulé', won: 'Gagnée', lost: 'Perdue', refunded: 'Remboursée', closed: 'Fermé', yes: 'Oui', no: 'Non' };
 export function Status({ value }: {
     value: string;
 }) { return <span className={`p-badge p-badge-${value}`}>{labels[value] || value}</span>; }

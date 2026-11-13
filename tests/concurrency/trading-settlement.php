@@ -87,6 +87,8 @@ if (($argv[1] ?? '') === '--worker') {
         check(trim(fgets(STDIN)) === 'GO', 'Missing barrier.');
         if ($job['operation'] === 'place') {
             app(PlacePosition::class)->place($job['user'], $job['market'], $job['outcome'], $job['amount'], $job['reference'], $job['quote_id'] ?? null);
+        } elseif ($job['operation'] === 'settle_batch') {
+            app(ResolveMarket::class)->settleBatch($job['market'], 1);
         } else {
             app(ResolveMarket::class)->resolve($job['market'], $job['result'], 'Source du test concurrent isolé');
         }
@@ -331,6 +333,18 @@ try {
     check(race([resolveJob($market, 'yes'), resolveJob($market, 'yes')], $control, 'markets', $market) === ['ok', 'ok'], 'Mixed-currency duplicate settlement failed.');
     check(balance($native) === 154000 && balance($xaf) === 1135, 'Mixed currencies were netted or paid twice.');
     echo "PASS mixed CDF/XAF participants / separate treasuries (observed lock waits)\n";
+
+    [$user, $market] = fixture();
+    foreach (range(1, 2) as $_) {
+        app(PlacePosition::class)->place($user, $market, 'yes', 100, (string) Str::uuid());
+    }
+    DB::table('markets')->where('id', $market)->update(['closes_at' => now()->subSecond()]);
+    app(ResolveMarket::class)->record($market, 'yes', 'Attestation officielle du test concurrent');
+    $job = ['operation' => 'settle_batch', 'market' => $market];
+    check(race([$job, $job], $control, 'markets', $market) === ['ok', 'ok'], 'Concurrent batch processing failed.');
+    check(DB::table('markets')->where('id', $market)->value('status') === 'settled', 'Concurrent batches left market unsettled.');
+    check(balance($user) === 1270, 'Concurrent batches duplicated or omitted a credit.');
+    echo "PASS concurrent resumable batches (observed lock waits)\n";
 
     check(Artisan::call('ledger:reconcile') === 0, 'Final ledger reconciliation failed.');
     check(DB::table('accounts')->whereNotNull('user_id')->where('balance', '<', 0)->count() === 0, 'Negative balance.');

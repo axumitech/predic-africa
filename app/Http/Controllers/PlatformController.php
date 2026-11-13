@@ -51,11 +51,11 @@ class PlatformController extends Controller
                 ->selectSub(DB::table('positions')->selectRaw('COUNT(DISTINCT user_id)')->whereColumn('market_id', 'markets.id'), 'participants')
                 ->selectSub(DB::table('users')->select('name')->whereColumn('users.id', 'markets.creator_id'), 'creator_name');
             if ($page === 'markets') {
-                $query->whereIn('status', ['open', 'resolved', 'void']);
+                $query->whereIn('status', \App\Modules\Markets\MarketState::PUBLIC_STATUSES);
             } elseif ($page === 'creator') {
                 $query->where('creator_id', $user->id);
             }
-            $filters = $request->validate(['q' => 'nullable|string|max:100', 'category' => 'nullable|string|max:30', 'status' => 'nullable|string|max:30', 'sort' => 'nullable|in:newest,closing,volume,popular', 'closing' => 'nullable|in:day,week']);
+            $filters = $request->validate(['q' => 'nullable|string|max:100', 'category' => 'nullable|string|max:30', 'status' => 'nullable|string|max:30', 'sort' => 'nullable|in:newest,closing,volume,popular', 'closing' => 'nullable|in:day,week', 'operation' => 'nullable|in:failed,blocked']);
             if (! empty($filters['q'])) {
                 $query->where('title', 'like', '%'.$filters['q'].'%');
             }
@@ -66,6 +66,11 @@ class PlatformController extends Controller
             }
             if (! empty($filters['closing'])) {
                 $query->where('closes_at', '>', now())->where('closes_at', '<=', $filters['closing'] === 'day' ? now()->addDay() : now()->addWeek());
+            }
+            if ($page === 'admin-markets' && ($filters['operation'] ?? null) === 'failed') {
+                $query->whereNotNull('processing_error');
+            } elseif ($page === 'admin-markets' && ($filters['operation'] ?? null) === 'blocked') {
+                $query->where(self::blockedMarket(...));
             }
             $sort = $filters['sort'] ?? 'newest';
             if ($sort === 'closing') $query->orderBy('closes_at');
@@ -87,6 +92,15 @@ class PlatformController extends Controller
             abort_unless($market, 404);
             Gate::authorize('view-market', $market);
             $data['market'] = $market;
+            if (! $data['adminView']) {
+                unset($market->processing_error);
+            }
+            if ($data['adminView']) {
+                $data['marketTransitions'] = DB::table('market_transitions')->where('market_id', $id)->orderByDesc('id')->limit(50)->get();
+            }
+            $data['myMarketPositions'] = DB::table('positions')->where('market_id', $id)->where('user_id', $user->id)
+                ->orderByDesc('id')->limit(20)->get()->map(self::exactPosition(...));
+
             if ($data['adminView'] && $market->status === 'pending') {
                 $data['marketReviewVersion'] = \App\Modules\Markets\MarketDraft::revision($market);
             }
@@ -101,7 +115,7 @@ class PlatformController extends Controller
                 ->leftJoin('fx_quotes', 'fx_quotes.id', '=', 'positions.fx_quote_id')
                 ->where('positions.user_id', $user->id)->when($filters['status'] ?? null, fn ($q, $status) => $q->where('positions.status', $status))
                 ->when($filters['q'] ?? null, fn ($q, $term) => $q->where('markets.title', 'like', '%'.$term.'%'))
-                ->select('positions.*', 'markets.title', 'markets.closes_at', 'markets.result', 'fx_quotes.rate as fx_rate', 'fx_quotes.as_of as fx_as_of')->orderByDesc('positions.id')->paginate(20)->withQueryString();
+                ->select('positions.*', 'markets.title', 'markets.closes_at', 'markets.result', 'markets.status as market_status', 'fx_quotes.rate as fx_rate', 'fx_quotes.as_of as fx_as_of')->orderByDesc('positions.id')->paginate(20)->withQueryString()->through(self::exactPosition(...));
         }
         if ($page === 'wallet') {
             $paymentSettings = app(\App\Modules\Infrastructure\Settings::class)->current();
@@ -190,6 +204,21 @@ class PlatformController extends Controller
                 'ledger_balance' => DB::table('ledger_entries')->selectRaw('currency, SUM(amount) as total')->groupBy('currency')->get()->filter(fn ($group) => (int) $group->total !== 0)->count(),
             ];
         }
+        if (in_array($page, ['admin', 'admin-markets'], true)) {
+            $data['marketOperations'] = [
+                'statuses' => DB::table('markets')->select('status')->selectRaw('COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
+                'failed' => DB::table('markets')->whereNotNull('processing_error')->count(),
+                'blocked' => DB::table('markets')->where(self::blockedMarket(...))->count(),
+                'paid' => DB::table('ledger_transactions')->whereIn('kind', ['Gain', 'Remboursement'])
+                    ->select('currency')->selectRaw('SUM(amount) as amount')->groupBy('currency')->get()->map(self::exactAmount(...)),
+                'due' => DB::table('positions')->join('markets', 'markets.id', '=', 'positions.market_id')
+                    ->whereIn('markets.status', ['resolved', 'settling'])->whereNotNull('markets.resolved_at')
+                    ->where('positions.status', 'open')->select('wallet_currency as currency')
+                    ->selectRaw("SUM(CASE WHEN markets.result = 'void' THEN COALESCE(wallet_stake, stake)
+                        WHEN markets.result = positions.outcome THEN COALESCE(wallet_payout, payout) ELSE 0 END) as amount")
+                    ->groupBy('wallet_currency')->get()->map(self::exactAmount(...)),
+            ];
+        }
         if ($page === 'admin') {
             $data['currencyBalances'] = DB::table('payment_wallets')->select('currency')->selectRaw('SUM(balance) as balance')
                 ->groupBy('currency')->orderBy('currency')->get()->map(function ($row) { $row->balance = (string) $row->balance; return $row; });
@@ -239,5 +268,26 @@ class PlatformController extends Controller
         DB::table('platform_notifications')->where('user_id', $request->user()->id)->whereNull('read_at')->update(['read_at' => now()]);
 
         return back()->with('success', 'Notifications marquées comme lues.');
+    }
+    private static function exactPosition(object $position): object
+    {
+        $position->wallet_stake = (string) ($position->wallet_stake ?? $position->stake);
+        $position->wallet_payout = (string) ($position->wallet_payout ?? $position->payout);
+
+        return $position;
+    }
+
+    private static function exactAmount(object $row): object
+    {
+        $row->amount = (string) $row->amount;
+
+        return $row;
+    }
+
+    private static function blockedMarket($query): void
+    {
+        $query->where(fn ($q) => $q->where('status', 'open')->where('closes_at', '<=', now()))
+            ->orWhere(fn ($q) => $q->whereIn('status', ['closed', 'pending_resolution', 'disputed', 'settling'])
+                ->where('closes_at', '<=', now()->subDay()));
     }
 }

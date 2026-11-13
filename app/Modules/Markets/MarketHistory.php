@@ -11,8 +11,8 @@ class MarketHistory
     {
         $close = CarbonImmutable::parse($market->closes_at, 'UTC');
         $end = $close->min(CarbonImmutable::now('UTC'));
-        if ($market->status === 'void' && $market->updated_at) {
-            $end = $end->min(CarbonImmutable::parse($market->updated_at, 'UTC'));
+        if ($market->result === 'void' && $market->updated_at) {
+            $end = $end->min(CarbonImmutable::parse($market->resolved_at ?? $market->updated_at, 'UTC'));
         }
         $start = $market->created_at ? CarbonImmutable::parse($market->created_at, 'UTC')->min($end) : $end;
         $startAt = $start->timestamp;

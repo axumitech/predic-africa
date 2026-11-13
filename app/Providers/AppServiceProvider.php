@@ -16,7 +16,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('superadmin', fn (User $user) => $user->isSuperadmin() && ! $user->suspended);
         Gate::define('admin', fn (User $user) => $user->isAdministrator() && ! $user->suspended);
         Gate::define('view-market', fn (User $user, object $market) => ! $user->suspended && (
-            in_array($market->status, ['open', 'resolved', 'void'], true)
+            in_array($market->status, \App\Modules\Markets\MarketState::PUBLIC_STATUSES, true)
             || (int) $market->creator_id === $user->id || Gate::forUser($user)->allows('admin')
         ));
         Gate::define('access-ticket', fn (User $user, object $ticket) => ! $user->suspended && (

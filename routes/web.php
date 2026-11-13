@@ -60,6 +60,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/notifications/read', [PlatformController::class, 'readNotifications']);
         Route::post('/profile', [IdentityController::class, 'profile']);
         Route::post('/admin/markets/{id}/moderate', [MarketController::class, 'moderate'])->whereNumber('id');
+        Route::post('/admin/markets/{id}/review-resolution', [SettlementController::class, 'review'])->whereNumber('id');
         Route::post('/admin/markets/{id}/resolve', [SettlementController::class, 'store'])->whereNumber('id');
         Route::post('/admin/pipeline/generate', [PipelineAdminController::class, 'generate'])->middleware('throttle:3,1,pipeline-generate:');
         Route::post('/admin/pipeline/generate-africa', [PipelineAdminController::class, 'generateAfrican'])->middleware('throttle:3,1,pipeline-africa:');

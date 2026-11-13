@@ -164,3 +164,78 @@ Artisan::command('platform:superadmin {email}', function () {
     }, 3);
     $this->info('Superadmin attribué. Une nouvelle connexion est requise.');
 });
+
+Artisan::command('markets:process', function () {
+    $now = now();
+    DB::table('markets')->where(function ($query) use ($now) {
+        $query->where(fn ($q) => $q->where('status', 'open')->where('closes_at', '<=', $now))
+            ->orWhere(fn ($q) => $q->where('status', 'closed')->where('event_ends_at', '<=', $now))
+            ->orWhere(fn ($q) => $q->whereIn('status', config('market_resolution.automatic_enabled')
+                ? ['pending_resolution', 'resolved', 'settling'] : ['resolved', 'settling'])
+                ->where('processing_due_at', '<=', $now));
+    })->orderBy('id')->chunkById(200, function ($markets) {
+        foreach ($markets as $market) {
+            \App\Modules\Settlement\ProcessMarket::dispatch((int) $market->id);
+        }
+    });
+})->purpose('Programmer la clôture, la vérification et le règlement des marchés éligibles');
+
+Schedule::command('markets:process')->everyMinute()->withoutOverlapping(5);
+
+Schedule::command('queue:work --queue=markets --stop-when-empty --tries=1 --timeout=60 --max-time=40')
+    ->everyMinute()->withoutOverlapping(5)
+    ->when(fn () => app()->isProduction() && config('market_resolution.scheduler_worker')
+        && ! in_array(config('queue.default'), ['sync', 'null', 'deferred', 'background'], true));
+
+
+Artisan::command('markets:audit', function () {
+    $issues = DB::table('markets')->where(function ($query) {
+        $query->where(fn ($q) => $q->where('status', 'open')->where('closes_at', '<=', now()))
+            ->orWhere(fn ($q) => $q->whereIn('status', ['closed', 'pending_resolution', 'disputed', 'settling'])
+                ->where('closes_at', '<=', now()->subDay()))
+            ->orWhereNotNull('processing_error')
+            ->orWhere(fn ($q) => $q->whereIn('status', ['settled', 'cancelled', 'resolved', 'void'])
+                ->whereNull('processing_due_at')->whereExists(DB::table('positions')->selectRaw('1')
+                    ->whereColumn('positions.market_id', 'markets.id')->where('positions.status', 'open')));
+    });
+    $count = 0;
+    $issues->select('id', 'status', 'closes_at', 'processing_error')->chunkById(200, function ($rows) use (&$count) {
+        foreach ($rows as $row) {
+            $count++;
+            $this->line(json_encode($row, JSON_THROW_ON_ERROR));
+        }
+    });
+
+    return $count === 0 ? 0 : 1;
+})->purpose('Lister les marchés bloqués et les positions historiques à examiner');
+
+Artisan::command('markets:configure-resolution {market} {--event-ends-at=} {--contract=} {--actor=}', function () {
+    $contract = json_decode((string) $this->option('contract'), true);
+    $data = \Illuminate\Support\Facades\Validator::make([
+        'rule' => $contract, 'event_ends_at' => $this->option('event-ends-at'),
+    ], [
+        'rule' => 'required|array:providers,event,condition,yes_value,no_value,on_cancel,on_tie',
+        'rule.providers' => 'required|array|list|min:1|max:3',
+        'rule.providers.*' => 'required|distinct|regex:/^[a-z0-9_-]+$/',
+        'rule.event' => 'required|string|max:150',
+        'rule.condition' => 'required|string|max:150',
+        'rule.yes_value' => 'required|string|max:100|different:rule.no_value',
+        'rule.no_value' => 'required|string|max:100',
+        'rule.on_cancel' => 'required|in:void,review',
+        'rule.on_tie' => 'required|in:yes,no,void,review',
+        'event_ends_at' => 'required|date_format:Y-m-d\TH:i:s\Z',
+    ])->validate();
+    foreach ($data['rule']['providers'] as $provider) {
+        abort_unless(filled(config("market_resolution.providers.$provider")), 422, 'Adaptateur officiel inconnu.');
+    }
+    DB::transaction(function () use ($data) {
+        $market = DB::table('markets')->where('id', $this->argument('market'))->lockForUpdate()->firstOrFail();
+        $actor = User::whereKey((int) $this->option('actor'))->lockForUpdate()->firstOrFail();
+        \Illuminate\Support\Facades\Gate::forUser($actor)->authorize('admin');
+        abort_unless($market->status === 'pending', 422, 'Contrat modifiable uniquement avant publication.');
+        \App\Modules\Markets\MarketState::transition($market, 'pending', 'Configuration du contrat de résolution.', [
+            'event_ends_at' => \Carbon\CarbonImmutable::parse($data['event_ends_at']),
+            'resolution_rule' => json_encode($data['rule'], JSON_THROW_ON_ERROR),
+        ], $actor->id, $data);
+    }, 3);
+})->purpose('Configurer un contrat de résolution avant la publication du marché');
