@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePoll } from '@inertiajs/react';
 import { useState } from 'react';
 import { CurrencyProvider, ReferenceAmount, formatMinor, type Fx, type Minor } from '../features/platform/currency';
 import PositionOrder from '../features/platform/PositionOrder';
@@ -92,9 +92,14 @@ type Props = {
     };
 };
 export default function Platform(props: Props) {
-    return <CurrencyProvider initial={props.fx} enabled={!!props.auth}>{props.page === 'home'
+    return <CurrencyProvider initial={props.fx} enabled={!!props.auth}>{['home', 'markets', 'dashboard'].includes(props.page) && <MarketListRefresh key={props.page}/>}{props.page === 'home'
         ? <Landing authenticated={!!props.auth} markets={props.markets} stats={props.stats}/>
         : <Layout {...props}><Content key={props.page + (props.market?.id || props.ticket?.id || '')} {...props}/></Layout>}</CurrencyProvider>;
+}
+
+function MarketListRefresh() {
+    usePoll(30_000, { only: ['markets', 'stats'] });
+    return null;
 }
 
 function Content(props: Props) {

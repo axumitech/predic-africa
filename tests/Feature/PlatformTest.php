@@ -75,6 +75,35 @@ class PlatformTest extends TestCase
         $this->get('/markets?sort=invalid')->assertSessionHasErrors('sort');
     }
 
+    public function test_market_lists_only_include_open_markets_before_their_deadline(): void
+    {
+        $this->freezeSecond();
+        $user = $this->user();
+        $active = $this->market($user);
+        $expired = $this->market($user);
+        DB::table('markets')->where('id', $expired)->update(['closes_at' => now()]);
+        foreach (['pending', 'rejected', 'closed', 'pending_resolution', 'disputed', 'resolved', 'settling', 'settled', 'cancelled', 'void'] as $status) {
+            $this->market($user, $status);
+        }
+
+        $this->actingAs($user);
+        foreach (['/', '/markets', '/dashboard', '/markets?status=open&sort=closing'] as $url) {
+            $this->get($url)->assertOk()->assertInertia(fn (Assert $page) => $page
+                ->where('markets.total', 1)->has('markets.data', 1)->where('markets.data.0.id', $active));
+        }
+        $this->get('/markets?status=settled')->assertInertia(fn (Assert $page) => $page->where('markets.total', 0));
+
+        $this->travel(1)->days();
+        $this->get('/markets')->assertInertia(fn (Assert $page) => $page->where('markets.total', 0));
+        $this->get("/markets/$active")->assertOk();
+        $this->assertDatabaseCount('markets', 12);
+
+        $this->actingAs($this->user(true))->get('/admin/markets')->assertInertia(fn (Assert $page) => $page
+            ->where('markets.total', 12));
+        $this->get('/admin/markets?status=settled')->assertInertia(fn (Assert $page) => $page
+            ->where('markets.total', 1)->where('markets.data.0.status', 'settled'));
+    }
+
     public function test_registration_authenticates_and_never_accepts_admin_role(): void
     {
         $this->post('/register', ['name' => 'Trader', 'email' => 'trader@example.test', 'password' => 'test-password-123', 'password_confirmation' => 'test-password-123', 'role' => 'admin', 'country' => 'GAB', 'currency' => 'XAF', 'phone' => '+24177000000'])->assertRedirect('/dashboard');

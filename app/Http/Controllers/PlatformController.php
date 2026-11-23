@@ -51,7 +51,7 @@ class PlatformController extends Controller
                 ->selectSub(DB::table('positions')->selectRaw('COUNT(DISTINCT user_id)')->whereColumn('market_id', 'markets.id'), 'participants')
                 ->selectSub(DB::table('users')->select('name')->whereColumn('users.id', 'markets.creator_id'), 'creator_name');
             if ($page === 'markets') {
-                $query->whereIn('status', \App\Modules\Markets\MarketState::PUBLIC_STATUSES);
+                $query->where('status', 'open')->where('closes_at', '>', now());
             } elseif ($page === 'creator') {
                 $query->where('creator_id', $user->id);
             }
